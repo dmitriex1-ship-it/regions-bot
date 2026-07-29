@@ -541,7 +541,7 @@ async def handle_neighbors(callback: types.CallbackQuery):
     chosen_code = parts[2]
     is_correct = (correct_code == chosen_code)
 
-    update_stats(str(callback.from_user.id), correct=is_correct, mode="quiz", code=correct_code)
+    update_stats(str(callback.from_user.id), correct=is_correct, mode="match", code=correct_code)
 
     if is_correct:
         await callback.answer(f"✅ Правильно! {correct_code} — {regions[correct_code]['name']}.", show_alert=True)
@@ -685,7 +685,7 @@ async def next_district_card(callback: types.CallbackQuery):
 async def district_test(callback: types.CallbackQuery):
     _, user = get_user(str(callback.from_user.id))
     state = user.get("district_state")
-    if not state or not state["codes"]:
+    if not state or not state.get["codes"]:
         await callback.answer("Сначала выбери округ и посмотри карточки", show_alert=True)
         return
     await send_district_test_question(callback)
