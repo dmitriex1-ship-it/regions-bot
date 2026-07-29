@@ -299,7 +299,6 @@ async def cb_stats(callback: types.CallbackQuery):
     # Топ-5 худших регионов
     stats = user.get("region_stats", {})
     if stats:
-        worst = sorted(stats.items(), key=lambda x: x[1]["correct"] / max(x[1]["total"], 1))[:5]
         worst = [item for item in stats.items() if item[1]["total"] > 0]
         worst.sort(key=lambda x: x[1]["correct"] / x[1]["total"])
         worst = worst[:5]
@@ -355,9 +354,9 @@ async def reset_stats_yes(callback: types.CallbackQuery):
 # ========== РЕЖИМ: КАРТОЧКИ (ВСЕ) ==========
 @dp.callback_query(F.data == "mode_cards_all")
 async def start_cards_all(callback: types.CallbackQuery):
-    _, user = get_user(str(callback.from_user.id))
+    users, user = get_user(str(callback.from_user.id))
     user["ordered_state"] = {"index": 0, "codes": ORDERED_CODES.copy()}
-    save_users(load_users())
+    save_users(users)
     await show_card(callback)
 
 async def show_card(update):
@@ -426,15 +425,19 @@ async def next_card(callback: types.CallbackQuery):
     state = user.get("ordered_state")
     if state:
         state["index"] += 1
-        save_users(load_users())
+        users, user = get_user(str(callback.from_user.id))
+        state = user.get("ordered_state")  # или district_state
+    if state:
+        state["index"] += 1
+        save_users(users)
     await show_card(callback)
 
 # ========== РЕЖИМ: ПО ПОРЯДКУ (от 01 до 89) ==========
 @dp.callback_query(F.data == "mode_ordered")
 async def start_ordered(callback: types.CallbackQuery):
-    _, user = get_user(str(callback.from_user.id))
+    users, user = get_user(str(callback.from_user.id))
     user["ordered_state"] = {"index": 0, "codes": ORDERED_CODES.copy()}
-    save_users(load_users())
+    save_users(users)
     await show_ordered(callback)
 
 async def show_ordered(update):
@@ -601,9 +604,9 @@ async def district_selected(callback: types.CallbackQuery):
         await callback.answer("Округ не найден", show_alert=True)
         return
 
-    _, user = get_user(str(callback.from_user.id))
+    users, user = get_user(str(callback.from_user.id))
     user["district_state"] = {"district": district, "index": 0, "codes": codes}
-    save_users(load_users())
+    save_users(users)
 
     builder = InlineKeyboardBuilder()
     builder.button(text="📖 Карточки округа", callback_data="district_cards")
@@ -696,7 +699,11 @@ async def next_district_card(callback: types.CallbackQuery):
     state = user.get("district_state")
     if state:
         state["index"] += 1
-        save_users(load_users())
+        users, user = get_user(str(callback.from_user.id))
+        state = user.get("ordered_state")  # или district_state
+    if state:
+        state["index"] += 1
+        save_users(users)
     await show_district_card(callback)
 
 # ========== ТЕСТ ПО ОКРУГУ ==========
@@ -704,7 +711,7 @@ async def next_district_card(callback: types.CallbackQuery):
 async def district_test(callback: types.CallbackQuery):
     _, user = get_user(str(callback.from_user.id))
     state = user.get("district_state")
-    if not state or not state.get["codes"]:
+    if not state or not state.get("codes"):
         await callback.answer("Сначала выбери округ и посмотри карточки", show_alert=True)
         return
     await send_district_test_question(callback)
