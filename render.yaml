@@ -1,7 +1,7 @@
 services:
   - type: worker
     name: regions-bot
-    runtime: python
-    pythonVersion: 3.12
+    env: python
+    plan: free
     buildCommand: pip install -r requirements.txt
     startCommand: python3 bot.py
