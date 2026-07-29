@@ -222,6 +222,22 @@ async def cmd_start(message: types.Message):
         parse_mode="HTML",
         reply_markup=main_menu_kb(),
     )
+    
+@dp.message(Command("reset"))
+async def cmd_reset(message: types.Message):
+    users = load_users()
+    users[str(message.chat.id)] = {
+        "total": 0, "correct": 0, "wrong": 0, "hints_used": 0,
+        "quiz_total": 0, "quiz_correct": 0,
+        "match_total": 0, "match_correct": 0,
+        "tf_total": 0, "tf_correct": 0,
+        "exam_total": 0, "exam_correct": 0,
+        "quiz_state": None, "match_state": None, "exam_state": None,
+        "district_state": None, "ordered_state": None, "neighbors_state": None,
+        "region_stats": {},
+    }
+    save_users(users)
+    await message.answer("✅ Статистика сброшена. Структура обновлена. Теперь всё должно работать.")
 
 @dp.callback_query(F.data == "to_menu")
 async def to_menu(callback: types.CallbackQuery):
