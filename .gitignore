@@ -1,0 +1,5 @@
+users.json
+__pycache__
+*.pyc
+.DS_Store
+bot_files.zip
