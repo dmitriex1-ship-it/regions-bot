@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: regions-bot
+    runtime: python
+    pythonVersion: 3.12
+    buildCommand: pip install -r requirements.txt
+    startCommand: python3 bot.py
