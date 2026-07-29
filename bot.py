@@ -300,6 +300,9 @@ async def cb_stats(callback: types.CallbackQuery):
     stats = user.get("region_stats", {})
     if stats:
         worst = sorted(stats.items(), key=lambda x: x[1]["correct"] / max(x[1]["total"], 1))[:5]
+        worst = [item for item in stats.items() if item[1]["total"] > 0]
+        worst.sort(key=lambda x: x[1]["correct"] / x[1]["total"])
+        worst = worst[:5]
         text += "\n<b>🔴 Сложные регионы:</b>\n"
         for code, s in worst:
             name = regions.get(code, {}).get("name", code)
