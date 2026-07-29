@@ -730,11 +730,26 @@ async def to_menu(callback: types.CallbackQuery):
     await callback.answer()
     
 # ========== ЗАПУСК ==========
+from aiohttp import web
+
+async def health_check(request):
+    return web.Response(text="OK")
+
 async def main():
     IMAGES_DIR.mkdir(exist_ok=True)
     BLUR_DIR.mkdir(exist_ok=True)
     print(f"Бот запущен. Картинки: {IMAGES_DIR.absolute()}")
     print(f"Размытые превью: {BLUR_DIR.absolute()}")
+    
+    # HTTP-сервер для Render
+    app = web.Application()
+    app.router.add_get("/", health_check)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, "0.0.0.0", 10000)
+    await site.start()
+    print("HTTP-сервер на порту 10000")
+    
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
