@@ -421,12 +421,8 @@ async def show_card(update):
 
 @dp.callback_query(F.data == "next_card")
 async def next_card(callback: types.CallbackQuery):
-    _, user = get_user(str(callback.from_user.id))
+    users, user = get_user(str(callback.from_user.id))
     state = user.get("ordered_state")
-    if state:
-        state["index"] += 1
-        users, user = get_user(str(callback.from_user.id))
-        state = user.get("ordered_state")  # или district_state
     if state:
         state["index"] += 1
         save_users(users)
@@ -498,11 +494,11 @@ async def show_ordered(update):
 
 @dp.callback_query(F.data == "next_ordered")
 async def next_ordered(callback: types.CallbackQuery):
-    _, user = get_user(str(callback.from_user.id))
+    users, user = get_user(str(callback.from_user.id))
     state = user.get("ordered_state")
     if state:
         state["index"] += 1
-        save_users(load_users())
+        save_users(users)
     await show_ordered(callback)
 
 # ========== РЕЖИМ: ТЕСТ «СОСЕДИ» ==========
@@ -695,12 +691,8 @@ async def show_district_card(update):
 
 @dp.callback_query(F.data == "next_district_card")
 async def next_district_card(callback: types.CallbackQuery):
-    _, user = get_user(str(callback.from_user.id))
+    users, user = get_user(str(callback.from_user.id))
     state = user.get("district_state")
-    if state:
-        state["index"] += 1
-        users, user = get_user(str(callback.from_user.id))
-        state = user.get("ordered_state")  # или district_state
     if state:
         state["index"] += 1
         save_users(users)
