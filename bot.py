@@ -545,7 +545,14 @@ async def handle_neighbors(callback: types.CallbackQuery):
 # ========== РЕЖИМ: ПО ОКРУГАМ ==========
 @dp.callback_query(F.data == "mode_district")
 async def mode_district(callback: types.CallbackQuery):
-    await callback.message.edit_text("🗺 Выбери федеральный округ:", reply_markup=district_menu_kb())
+    try:
+        await callback.message.edit_text("🗺 Выбери федеральный округ:", reply_markup=district_menu_kb())
+    except:
+        await bot.send_message(
+            chat_id=callback.from_user.id,
+            text="🗺 Выбери федеральный округ:",
+            reply_markup=district_menu_kb()
+        )
     await callback.answer()
 
 @dp.callback_query(F.data == "district_cards")
