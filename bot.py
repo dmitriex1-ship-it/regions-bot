@@ -471,12 +471,8 @@ async def start_neighbors(callback: types.CallbackQuery):
 async def send_neighbors_question(update):
     if isinstance(update, types.CallbackQuery):
         user_id = str(update.from_user.id)
-        msg = update.message
-        is_cb = True
     else:
         user_id = str(update.chat.id)
-        msg = update
-        is_cb = False
 
     idx = random.randint(1, len(ORDERED_CODES) - 2)
     left_code = ORDERED_CODES[idx - 1]
@@ -505,10 +501,13 @@ async def send_neighbors_question(update):
         f"Какой регион между ними?"
     )
 
-    if is_cb:
-        await msg.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
-    else:
-        await msg.answer(text, parse_mode="HTML", reply_markup=builder.as_markup())
+    await bot.send_message(
+        chat_id=user_id,
+        text=text,
+        parse_mode="HTML",
+        reply_markup=builder.as_markup()
+    )
+
     if isinstance(update, types.CallbackQuery):
         await update.answer()
 
