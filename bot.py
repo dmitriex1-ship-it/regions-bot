@@ -576,7 +576,10 @@ async def show_district_card(update):
         builder.button(text="🧪 Тест по округу", callback_data="district_test")
         builder.button(text="🗺 Выбрать другой", callback_data="mode_district")
         builder.button(text="📚 К изучению", callback_data="go_study_menu")
-        await msg.edit_text(text, reply_markup=builder.as_markup())
+        try:
+            await msg.edit_text(text, reply_markup=builder.as_markup())
+        except:
+            pass
         if isinstance(update, types.CallbackQuery):
             await update.answer()
         return
@@ -595,17 +598,24 @@ async def show_district_card(update):
     )
 
     builder = InlineKeyboardBuilder()
-    builder.button(text="▶️ Дальше", callback_data="next_district_card")
-    builder.button(text="🧪 Тест по округу", callback_data="district_test")
-    builder.button(text="🗺 Выбрать другой", callback_data="mode_district")
+    nav_buttons = []
+    if state["index"] > 0:
+        nav_buttons.append(InlineKeyboardButton(text="⬅️ Назад", callback_data="prev_district_card"))
+    nav_buttons.append(InlineKeyboardButton(text="▶️ Дальше", callback_data="next_district_card"))
+    builder.row(*nav_buttons)
+    builder.row(InlineKeyboardButton(text="🧪 Тест по округу", callback_data="district_test"))
+    builder.row(InlineKeyboardButton(text="🗺 Выбрать другой", callback_data="mode_district"))
     builder.adjust(1)
 
     img_path = get_image_path(code)
-    if img_path:
-        photo = FSInputFile(img_path)
-        await msg.edit_media(InputMediaPhoto(media=photo, caption=text, parse_mode="HTML"), reply_markup=builder.as_markup())
-    else:
-        await msg.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
+    try:
+        if img_path:
+            photo = FSInputFile(img_path)
+            await msg.edit_media(InputMediaPhoto(media=photo, caption=text, parse_mode="HTML"), reply_markup=builder.as_markup())
+        else:
+            await msg.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
+    except:
+        pass
 
     if isinstance(update, types.CallbackQuery):
         await update.answer()
@@ -1100,6 +1110,18 @@ async def district_back(callback: types.CallbackQuery):
         reply_markup=builder.as_markup(),
     )
     await callback.answer()
+
+@dp.callback_query(F.data == "prev_district_card")
+async def prev_district_card(callback: types.CallbackQuery):
+    users, user = get_user(str(callback.from_user.id))
+    state = user.get("district_state")
+    if not state:
+        await callback.answer("Сначала выбери округ", show_alert=True)
+        return
+    if state["index"] > 0:
+        state["index"] -= 1
+        save_users(users)
+    await show_district_card(callback)
 
 # ========== ЗАПУСК ==========
 async def health_check(request):
