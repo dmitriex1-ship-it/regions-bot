@@ -620,11 +620,14 @@ async def district_selected(callback: types.CallbackQuery):
 
 @dp.callback_query(F.data == "district_cards")
 async def district_cards(callback: types.CallbackQuery):
-    _, user = get_user(str(callback.from_user.id))
+    users, user = get_user(str(callback.from_user.id))
     state = user.get("district_state")
     if not state:
         await callback.answer("Сначала выбери округ", show_alert=True)
         return
+    # Сбрасываем индекс на начало
+    state["index"] = 0
+    save_users(users)
     await show_district_card(callback)
 
 async def show_district_card(update):
@@ -637,9 +640,9 @@ async def show_district_card(update):
         msg = update
         is_cb = False
 
-    _, user = get_user(user_id)
+    users, user = get_user(user_id)
     state = user.get("district_state")
-    if not state or state["index"] >= len(state["codes"]):
+    if not state or state["index"] >= len(state.get("codes", [])):
         district = state["district"] if state else "округ"
         text = f"✅ Все регионы округа «{district}» пройдены!"
         builder = InlineKeyboardBuilder()
@@ -701,7 +704,7 @@ async def next_district_card(callback: types.CallbackQuery):
 # ========== ТЕСТ ПО ОКРУГУ ==========
 @dp.callback_query(F.data == "district_test")
 async def district_test(callback: types.CallbackQuery):
-    _, user = get_user(str(callback.from_user.id))
+    users, user = get_user(str(callback.from_user.id))
     state = user.get("district_state")
     if not state or not state.get("codes"):
         await callback.answer("Сначала выбери округ и посмотри карточки", show_alert=True)
