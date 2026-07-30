@@ -611,17 +611,19 @@ async def district_test(callback: types.CallbackQuery):
     if not state or not state.get("codes"):
         await callback.answer("Сначала выбери округ и посмотри карточки", show_alert=True)
         return
+    # Отправляем новое сообщение для теста
+    await bot.send_message(
+        chat_id=callback.from_user.id,
+        text="Загрузка теста..."
+    )
     await send_district_test_question(callback)
 
 async def send_district_test_question(update):
+    # Всегда отправляем новое сообщение
     if isinstance(update, types.CallbackQuery):
         user_id = str(update.from_user.id)
-        msg = update.message
-        is_cb = True
     else:
         user_id = str(update.chat.id)
-        msg = update
-        is_cb = False
 
     _, user = get_user(user_id)
     state = user.get("district_state")
@@ -648,17 +650,12 @@ async def send_district_test_question(update):
         f"Выбери регион:"
     )
 
-    img_path = get_image_path(code)
-    if img_path and is_cb:
-        photo = FSInputFile(img_path)
-        await msg.edit_media(InputMediaPhoto(media=photo, caption=text, parse_mode="HTML"), reply_markup=builder.as_markup())
-    elif img_path:
-        photo = FSInputFile(img_path)
-        await msg.answer_photo(photo, caption=text, parse_mode="HTML", reply_markup=builder.as_markup())
-    elif is_cb:
-        await msg.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
-    else:
-        await msg.answer(text, parse_mode="HTML", reply_markup=builder.as_markup())
+    await bot.send_message(
+        chat_id=user_id,
+        text=text,
+        parse_mode="HTML",
+        reply_markup=builder.as_markup()
+    )
 
     if isinstance(update, types.CallbackQuery):
         await update.answer()
