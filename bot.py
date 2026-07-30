@@ -666,6 +666,10 @@ async def send_district_test_question(update):
 
 @dp.callback_query(F.data.startswith("district_"))
 async def district_selected(callback: types.CallbackQuery):
+    # Пропускаем служебные callback'и
+    if callback.data in ("district_cards", "district_test", "district_back"):
+        return
+    
     district = callback.data.replace("district_", "")
     codes = DISTRICTS.get(district, [])
     if not codes:
