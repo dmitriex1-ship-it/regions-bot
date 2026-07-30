@@ -174,7 +174,7 @@ def game_menu_kb():
         [InlineKeyboardButton(text="🎯 Угадай по ассоциации", callback_data="mode_quiz")],
         [InlineKeyboardButton(text="🧩 Найди пару", callback_data="mode_match")],
         [InlineKeyboardButton(text="⚡ Верно / Неверно", callback_data="mode_truefalse")],
-        [InlineKeyboardButton(text="🧩 Игра «Соседи»", callback_data="mode_neighbors")],
+        [InlineKeyboardButton(text="🤝 Игра «Соседи»", callback_data="mode_neighbors")],
         [InlineKeyboardButton(text="🏠 В главное меню", callback_data="to_menu")],
     ])
 
@@ -519,7 +519,7 @@ async def send_neighbors_question(update):
     builder.row(InlineKeyboardButton(text="📚 К изучению", callback_data="go_study_menu"))
 
     text = (
-        f"🧩 <b>Игра «Соседи»</b>\n\n"
+        f"🤝 <b>Игра «Соседи»</b>\n\n"
         f"{left_code} — <b>{left_name}</b>\n"
         f"❓ — <b>???</b>\n"
         f"{right_code} — <b>{right_name}</b>\n\n"
