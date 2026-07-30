@@ -229,7 +229,12 @@ async def to_menu(callback: types.CallbackQuery):
 
 @dp.callback_query(F.data == "go_study_menu")
 async def go_study_menu(callback: types.CallbackQuery):
-    await callback.message.edit_text("📚 <b>Изучение</b> — выбери режим:", parse_mode="HTML", reply_markup=study_menu_kb())
+    await bot.send_message(
+        chat_id=callback.from_user.id,
+        text="📚 <b>Изучение</b> — выбери режим:",
+        parse_mode="HTML",
+        reply_markup=study_menu_kb(),
+    )
     await callback.answer()
 
 @dp.callback_query(F.data == "go_game_menu")
