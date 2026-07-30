@@ -156,7 +156,7 @@ def mode_percent(user: dict, mode: str) -> float:
 def main_menu_kb():
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="📚 Изучение", callback_data="study_menu")],
+            [InlineKeyboardButton(text="📚 Изучение", callback_data="go_study_menu")],
             [InlineKeyboardButton(text="🎮 Тренировка", callback_data="game_menu")],
             [InlineKeyboardButton(text="📊 Статистика", callback_data="stats")],
         ]
@@ -195,7 +195,7 @@ def district_menu_kb():
 def back_study_kb():
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="📚 К изучению", callback_data="study_menu")],
+            [InlineKeyboardButton(text="📚 К изучению", callback_data="go_study_menu")],
             [InlineKeyboardButton(text="🏠 В главное меню", callback_data="to_menu")],
         ]
     )
@@ -248,8 +248,8 @@ async def to_menu(callback: types.CallbackQuery):
     )
     await callback.answer()
 
-@dp.callback_query(F.data == "study_menu")
-async def study_menu(callback: types.CallbackQuery):
+@dp.callback_query(F.data == "go_study_menu")
+async def go_study_menu(callback: types.CallbackQuery):
     await callback.message.edit_text(
         "📚 <b>Изучение</b> — выбери режим:",
         parse_mode="HTML",
@@ -374,7 +374,7 @@ async def show_card(update):
     if not state or state["index"] >= len(state["codes"]):
         text = "✅ Все регионы пройдены!"
         builder = InlineKeyboardBuilder()
-        builder.button(text="📚 К изучению", callback_data="study_menu")
+        builder.button(text="📚 К изучению", callback_data="go_study_menu")
         builder.button(text="🏠 В главное меню", callback_data="to_menu")
         if is_cb:
             await msg.edit_text(text, reply_markup=builder.as_markup())
@@ -398,7 +398,7 @@ async def show_card(update):
 
     builder = InlineKeyboardBuilder()
     builder.button(text="▶️ Дальше", callback_data="next_card")
-    builder.button(text="📚 К изучению", callback_data="study_menu")
+    builder.button(text="📚 К изучению", callback_data="go_study_menu")
     builder.adjust(1)
 
     img_path = get_image_path(code)
@@ -451,7 +451,7 @@ async def show_ordered(update):
     if not state or state["index"] >= len(state["codes"]):
         text = "✅ Все коды пройдены по порядку!"
         builder = InlineKeyboardBuilder()
-        builder.button(text="📚 К изучению", callback_data="study_menu")
+        builder.button(text="📚 К изучению", callback_data="go_study_menu")
         builder.button(text="🏠 В главное меню", callback_data="to_menu")
         if is_cb:
             await msg.edit_text(text, reply_markup=builder.as_markup())
@@ -471,7 +471,7 @@ async def show_ordered(update):
 
     builder = InlineKeyboardBuilder()
     builder.button(text="▶️ Дальше", callback_data="next_ordered")
-    builder.button(text="📚 К изучению", callback_data="study_menu")
+    builder.button(text="📚 К изучению", callback_data="go_study_menu")
     builder.adjust(1)
 
     img_path = get_image_path(code)
@@ -535,7 +535,7 @@ async def send_neighbors_question(update):
     for opt in options:
         builder.button(text=regions[opt]["name"], callback_data=f"neighbors_{correct_code}_{opt}")
     builder.adjust(1)
-    builder.row(InlineKeyboardButton(text="📚 К изучению", callback_data="study_menu"))
+    builder.row(InlineKeyboardButton(text="📚 К изучению", callback_data="go_study_menu"))
 
     text = (
         f"🧩 <b>Тест «Соседи»</b>\n\n"
@@ -572,7 +572,7 @@ async def handle_neighbors(callback: types.CallbackQuery):
         )
         builder = InlineKeyboardBuilder()
         builder.button(text="▶️ Дальше", callback_data="mode_neighbors")
-        builder.button(text="📚 К изучению", callback_data="study_menu")
+        builder.button(text="📚 К изучению", callback_data="go_study_menu")
         builder.adjust(1)
 
         img_path = get_image_path(correct_code)
@@ -608,7 +608,7 @@ async def district_selected(callback: types.CallbackQuery):
     builder.button(text="📖 Карточки округа", callback_data="district_cards")
     builder.button(text="🧪 Тест по округу", callback_data="district_test")
     builder.button(text="🗺 Выбрать другой", callback_data="mode_district")
-    builder.button(text="📚 К изучению", callback_data="study_menu")
+    builder.button(text="📚 К изучению", callback_data="go_study_menu")
     builder.adjust(1)
 
     await callback.message.edit_text(
@@ -645,7 +645,7 @@ async def show_district_card(update):
         builder = InlineKeyboardBuilder()
         builder.button(text="🧪 Тест по округу", callback_data="district_test")
         builder.button(text="🗺 Выбрать другой", callback_data="mode_district")
-        builder.button(text="📚 К изучению", callback_data="study_menu")
+        builder.button(text="📚 К изучению", callback_data="go_study_menu")
         if is_cb:
             await msg.edit_text(text, reply_markup=builder.as_markup())
         else:
