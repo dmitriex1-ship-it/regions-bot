@@ -553,6 +553,7 @@ async def mode_district(callback: types.CallbackQuery):
 async def district_selected(callback: types.CallbackQuery):
     # Пропускаем "district_cards" и "district_test"
     if callback.data in ("district_cards", "district_test"):
+        await callback.answer()
         return
     
     district = callback.data.replace("district_", "")
@@ -584,7 +585,6 @@ async def district_selected(callback: types.CallbackQuery):
 async def district_cards(callback: types.CallbackQuery):
     users, user = get_user(str(callback.from_user.id))
     state = user.get("district_state")
-    await callback.answer(f"State: {state}", show_alert=True)
     if not state or not state.get("codes"):
         await callback.answer("Сначала выбери округ", show_alert=True)
         return
@@ -604,8 +604,10 @@ async def show_district_card(update):
 
     _, user = get_user(user_id)
     state = user.get("district_state")
-    codes = state.get("codes", []) if state else []
-    if not state or state["index"] >= len(codes):
+    if not state:
+        return
+    codes = state.get("codes", [])
+    if not codes or state["index"] >= len(codes):
         district = state["district"] if state else "округ"
         text = f"✅ Все регионы округа «{district}» пройдены!"
         builder = InlineKeyboardBuilder()
