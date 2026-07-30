@@ -639,8 +639,7 @@ async def send_district_test_question(update):
     for opt in options:
         builder.button(text=regions[opt]["name"], callback_data=f"distest_{code}_{opt}")
     builder.adjust(1)
-    builder.row(InlineKeyboardButton(text="🔙 К округу", callback_data="district_back"), 
-                InlineKeyboardButton(text="🗺 Выбрать другой", callback_data="mode_district"),)
+    builder.row(InlineKeyboardButton(text="🗺 Выбрать другой", callback_data="mode_district"))
 
     text = (
         f"🧪 <b>Тест: {state['district']}</b>\n\n"
@@ -649,10 +648,18 @@ async def send_district_test_question(update):
         f"Выбери регион:"
     )
 
-    if is_cb:
+    img_path = get_image_path(code)
+    if img_path and is_cb:
+        photo = FSInputFile(img_path)
+        await msg.edit_media(InputMediaPhoto(media=photo, caption=text, parse_mode="HTML"), reply_markup=builder.as_markup())
+    elif img_path:
+        photo = FSInputFile(img_path)
+        await msg.answer_photo(photo, caption=text, parse_mode="HTML", reply_markup=builder.as_markup())
+    elif is_cb:
         await msg.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
     else:
         await msg.answer(text, parse_mode="HTML", reply_markup=builder.as_markup())
+
     if isinstance(update, types.CallbackQuery):
         await update.answer()
 
