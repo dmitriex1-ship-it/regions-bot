@@ -754,7 +754,7 @@ async def handle_distest(callback: types.CallbackQuery):
     chosen_code = parts[2]
     is_correct = (correct_code == chosen_code)
 
-   users, user = get_user(str(callback.from_user.id))
+    users, user = get_user(str(callback.from_user.id))
     user["total"] += 1
     if is_correct:
         user["correct"] += 1
