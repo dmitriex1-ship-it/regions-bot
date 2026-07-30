@@ -754,7 +754,13 @@ async def handle_distest(callback: types.CallbackQuery):
     chosen_code = parts[2]
     is_correct = (correct_code == chosen_code)
 
-    update_stats(str(callback.from_user.id), correct=is_correct)
+   users, user = get_user(str(callback.from_user.id))
+    user["total"] += 1
+    if is_correct:
+        user["correct"] += 1
+    else:
+        user["wrong"] += 1
+    save_users(users)
 
     if is_correct:
         await callback.answer(f"✅ Правильно! {correct_code} — {regions[correct_code]['name']}.", show_alert=True)
