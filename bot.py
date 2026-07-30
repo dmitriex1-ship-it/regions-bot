@@ -33,8 +33,8 @@ DISTRICTS = {
     "Северо-Западный": ["10","11","29","35","39","47","51","53","60","78","83","178"],
     "Южный": ["01","08","23","30","34","61","82","92","123","161"],
     "Северо-Кавказский": ["05","06","07","09","15","20","26","95"],
-    "Приволжский": ["02","12","13","16","18","21","43","45","52","56","58","59","63","64","73","116","152"],
-    "Уральский": ["66","72","74","86","89","174","186"],
+    "Приволжский": ["02","12","13","16","18","21","43","52","56","58","59","63","64","73","116","152"],
+    "Уральский": ["45","66","72","74","86","89","174","186"],
     "Сибирский": ["03","04","17","19","22","24","38","42","54","55","70","138","154"],
     "Дальневосточный": ["14","25","27","28","41","49","65","75","79","87"],
 }
@@ -150,39 +150,32 @@ def mode_percent(user: dict, mode: str) -> float:
     if total == 0:
         return 0.0
     return (user.get(f"{mode}_correct", 0) / total) * 100
-    
-# -------------------- КЛАВИАТУРЫ --------------------
+
 # -------------------- КЛАВИАТУРЫ --------------------
 def main_menu_kb():
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="📚 Изучение", callback_data="go_study_menu")],
-            [InlineKeyboardButton(text="🎮 Тренировка", callback_data="game_menu")],
-            [InlineKeyboardButton(text="📊 Статистика", callback_data="stats")],
-        ]
-    )
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📚 Изучение", callback_data="go_study_menu")],
+        [InlineKeyboardButton(text="🎮 Тренировка", callback_data="go_game_menu")],
+        [InlineKeyboardButton(text="📊 Статистика", callback_data="stats")],
+    ])
 
 def study_menu_kb():
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="📖 Карточки (все)", callback_data="mode_cards_all")],
-            [InlineKeyboardButton(text="🗺 По округам", callback_data="mode_district")],
-            [InlineKeyboardButton(text="📜 По порядку", callback_data="mode_ordered")],
-            [InlineKeyboardButton(text="🧩 Тест «Соседи»", callback_data="mode_neighbors")],
-            [InlineKeyboardButton(text="🏠 В главное меню", callback_data="to_menu")],
-        ]
-    )
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📖 Карточки (все)", callback_data="mode_cards_all")],
+        [InlineKeyboardButton(text="🗺 По округам", callback_data="mode_district")],
+        [InlineKeyboardButton(text="📜 По порядку", callback_data="mode_ordered")],
+        [InlineKeyboardButton(text="🧩 Тест «Соседи»", callback_data="mode_neighbors")],
+        [InlineKeyboardButton(text="🏠 В главное меню", callback_data="to_menu")],
+    ])
 
 def game_menu_kb():
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="🎯 Угадай по ассоциации", callback_data="mode_quiz")],
-            [InlineKeyboardButton(text="🧩 Найди пару", callback_data="mode_match")],
-            [InlineKeyboardButton(text="⚡ Верно / Неверно", callback_data="mode_truefalse")],
-            [InlineKeyboardButton(text="📝 Экзамен", callback_data="mode_exam")],
-            [InlineKeyboardButton(text="🏠 В главное меню", callback_data="to_menu")],
-        ]
-    )
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🎯 Угадай по ассоциации", callback_data="mode_quiz")],
+        [InlineKeyboardButton(text="🧩 Найди пару", callback_data="mode_match")],
+        [InlineKeyboardButton(text="⚡ Верно / Неверно", callback_data="mode_truefalse")],
+        [InlineKeyboardButton(text="📝 Экзамен", callback_data="mode_exam")],
+        [InlineKeyboardButton(text="🏠 В главное меню", callback_data="to_menu")],
+    ])
 
 def district_menu_kb():
     builder = InlineKeyboardBuilder()
@@ -192,20 +185,10 @@ def district_menu_kb():
     builder.adjust(1)
     return builder.as_markup()
 
-def back_study_kb():
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="📚 К изучению", callback_data="go_study_menu")],
-            [InlineKeyboardButton(text="🏠 В главное меню", callback_data="to_menu")],
-        ]
-    )
-
 def back_kb():
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="🏠 В главное меню", callback_data="to_menu")]
-        ]
-    )
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🏠 В главное меню", callback_data="to_menu")]
+    ])
 
 # -------------------- БОТ --------------------
 bot = Bot(token=TOKEN)
@@ -222,7 +205,7 @@ async def cmd_start(message: types.Message):
         parse_mode="HTML",
         reply_markup=main_menu_kb(),
     )
-    
+
 @dp.message(Command("reset"))
 async def cmd_reset(message: types.Message):
     users = load_users()
@@ -237,33 +220,21 @@ async def cmd_reset(message: types.Message):
         "region_stats": {},
     }
     save_users(users)
-    await message.answer("✅ Статистика сброшена. Структура обновлена. Теперь всё должно работать.")
+    await message.answer("✅ Статистика сброшена.")
 
 @dp.callback_query(F.data == "to_menu")
 async def to_menu(callback: types.CallbackQuery):
-    await bot.send_message(
-        chat_id=callback.from_user.id,
-        text="🚗 Главное меню:",
-        reply_markup=main_menu_kb(),
-    )
+    await bot.send_message(chat_id=callback.from_user.id, text="🚗 Главное меню:", reply_markup=main_menu_kb())
     await callback.answer()
 
 @dp.callback_query(F.data == "go_study_menu")
 async def go_study_menu(callback: types.CallbackQuery):
-    await callback.message.edit_text(
-        "📚 <b>Изучение</b> — выбери режим:",
-        parse_mode="HTML",
-        reply_markup=study_menu_kb(),
-    )
+    await callback.message.edit_text("📚 <b>Изучение</b> — выбери режим:", parse_mode="HTML", reply_markup=study_menu_kb())
     await callback.answer()
 
-@dp.callback_query(F.data == "game_menu")
-async def game_menu(callback: types.CallbackQuery):
-    await callback.message.edit_text(
-        "🎮 <b>Тренировка</b> — выбери игру:",
-        parse_mode="HTML",
-        reply_markup=game_menu_kb(),
-    )
+@dp.callback_query(F.data == "go_game_menu")
+async def go_game_menu(callback: types.CallbackQuery):
+    await callback.message.edit_text("🎮 <b>Тренировка</b> — выбери игру:", parse_mode="HTML", reply_markup=game_menu_kb())
     await callback.answer()
 
 # ========== СТАТИСТИКА ==========
@@ -296,17 +267,17 @@ async def cb_stats(callback: types.CallbackQuery):
     text += f"⚡ Верно/Неверно: {user['tf_correct']}/{user['tf_total']} ({mode_percent(user, 'tf'):.0f}%)\n"
     text += f"📝 Экзамен: {user['exam_correct']}/{user['exam_total']} ({mode_percent(user, 'exam'):.0f}%)\n"
 
-    # Топ-5 худших регионов
     stats = user.get("region_stats", {})
     if stats:
         worst = [item for item in stats.items() if item[1]["total"] > 0]
         worst.sort(key=lambda x: x[1]["correct"] / x[1]["total"])
         worst = worst[:5]
-        text += "\n<b>🔴 Сложные регионы:</b>\n"
-        for code, s in worst:
-            name = regions.get(code, {}).get("name", code)
-            p = (s["correct"] / max(s["total"], 1)) * 100
-            text += f"{code} — {name}: {p:.0f}%\n"
+        if worst:
+            text += "\n<b>🔴 Сложные регионы:</b>\n"
+            for code, s in worst:
+                name = regions.get(code, {}).get("name", code)
+                p = (s["correct"] / max(s["total"], 1)) * 100
+                text += f"{code} — {name}: {p:.0f}%\n"
 
     builder = InlineKeyboardBuilder()
     builder.button(text="🔄 Обновить", callback_data="stats")
@@ -314,11 +285,7 @@ async def cb_stats(callback: types.CallbackQuery):
     builder.button(text="🏠 В главное меню", callback_data="to_menu")
     builder.adjust(1)
 
-    await callback.message.edit_text(
-        text,
-        parse_mode="HTML",
-        reply_markup=builder.as_markup(),
-    )
+    await callback.message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
     await callback.answer()
 
 @dp.callback_query(F.data == "reset_stats_confirm")
@@ -327,11 +294,7 @@ async def reset_stats_confirm(callback: types.CallbackQuery):
     builder.button(text="✅ Да, сбросить", callback_data="reset_stats_yes")
     builder.button(text="❌ Отмена", callback_data="stats")
     builder.adjust(2)
-    await callback.message.edit_text(
-        "🗑 <b>Точно сбросить всю статистику?</b>",
-        parse_mode="HTML",
-        reply_markup=builder.as_markup(),
-    )
+    await callback.message.edit_text("🗑 <b>Точно сбросить всю статистику?</b>", parse_mode="HTML", reply_markup=builder.as_markup())
     await callback.answer()
 
 @dp.callback_query(F.data == "reset_stats_yes")
@@ -404,10 +367,7 @@ async def show_card(update):
     img_path = get_image_path(code)
     if img_path and is_cb:
         photo = FSInputFile(img_path)
-        await msg.edit_media(
-            InputMediaPhoto(media=photo, caption=text, parse_mode="HTML"),
-            reply_markup=builder.as_markup(),
-        )
+        await msg.edit_media(InputMediaPhoto(media=photo, caption=text, parse_mode="HTML"), reply_markup=builder.as_markup())
     elif img_path:
         photo = FSInputFile(img_path)
         await msg.answer_photo(photo, caption=text, parse_mode="HTML", reply_markup=builder.as_markup())
@@ -428,7 +388,7 @@ async def next_card(callback: types.CallbackQuery):
         save_users(users)
     await show_card(callback)
 
-# ========== РЕЖИМ: ПО ПОРЯДКУ (от 01 до 89) ==========
+# ========== РЕЖИМ: ПО ПОРЯДКУ ==========
 @dp.callback_query(F.data == "mode_ordered")
 async def start_ordered(callback: types.CallbackQuery):
     users, user = get_user(str(callback.from_user.id))
@@ -477,10 +437,7 @@ async def show_ordered(update):
     img_path = get_image_path(code)
     if img_path and is_cb:
         photo = FSInputFile(img_path)
-        await msg.edit_media(
-            InputMediaPhoto(media=photo, caption=text, parse_mode="HTML"),
-            reply_markup=builder.as_markup(),
-        )
+        await msg.edit_media(InputMediaPhoto(media=photo, caption=text, parse_mode="HTML"), reply_markup=builder.as_markup())
     elif img_path:
         photo = FSInputFile(img_path)
         await msg.answer_photo(photo, caption=text, parse_mode="HTML", reply_markup=builder.as_markup())
@@ -501,7 +458,7 @@ async def next_ordered(callback: types.CallbackQuery):
         save_users(users)
     await show_ordered(callback)
 
-# ========== РЕЖИМ: ТЕСТ «СОСЕДИ» ==========
+# ========== ТЕСТ «СОСЕДИ» ==========
 @dp.callback_query(F.data == "mode_neighbors")
 async def start_neighbors(callback: types.CallbackQuery):
     await send_neighbors_question(callback)
@@ -516,7 +473,6 @@ async def send_neighbors_question(update):
         msg = update
         is_cb = False
 
-    # Выбираем случайный индекс от 1 до len-2
     idx = random.randint(1, len(ORDERED_CODES) - 2)
     left_code = ORDERED_CODES[idx - 1]
     right_code = ORDERED_CODES[idx + 1]
@@ -525,7 +481,6 @@ async def send_neighbors_question(update):
     left_name = regions[left_code]["name"]
     right_name = regions[right_code]["name"]
 
-    # 3 случайных неправильных кода
     other = [c for c in ALL_CODES if c != correct_code]
     wrong = random.sample(other, min(3, len(other)))
     options = wrong + [correct_code]
@@ -583,13 +538,10 @@ async def handle_neighbors(callback: types.CallbackQuery):
             await callback.message.reply(new_text, parse_mode="HTML", reply_markup=builder.as_markup())
         await callback.answer()
 
-# ========== РЕЖИМ: ПО ОКРУГАМ (меню) ==========
+# ========== РЕЖИМ: ПО ОКРУГАМ ==========
 @dp.callback_query(F.data == "mode_district")
 async def mode_district(callback: types.CallbackQuery):
-    await callback.message.edit_text(
-        "🗺 Выбери федеральный округ:",
-        reply_markup=district_menu_kb(),
-    )
+    await callback.message.edit_text("🗺 Выбери федеральный округ:", reply_markup=district_menu_kb())
     await callback.answer()
 
 @dp.callback_query(F.data.startswith("district_"))
@@ -601,7 +553,7 @@ async def district_selected(callback: types.CallbackQuery):
         return
 
     users, user = get_user(str(callback.from_user.id))
-    user["district_state"] = {"district": district, "index": 0, "codes": codes}
+    user["district_state"] = {"district": district, "index": 0, "codes": codes.copy()}
     save_users(users)
 
     builder = InlineKeyboardBuilder()
@@ -622,10 +574,9 @@ async def district_selected(callback: types.CallbackQuery):
 async def district_cards(callback: types.CallbackQuery):
     users, user = get_user(str(callback.from_user.id))
     state = user.get("district_state")
-    if not state:
+    if not state or not state.get("codes"):
         await callback.answer("Сначала выбери округ", show_alert=True)
         return
-    # Сбрасываем индекс на начало
     state["index"] = 0
     save_users(users)
     await show_district_card(callback)
@@ -640,9 +591,10 @@ async def show_district_card(update):
         msg = update
         is_cb = False
 
-    users, user = get_user(user_id)
+    _, user = get_user(user_id)
     state = user.get("district_state")
-    if not state or state["index"] >= len(state.get("codes", [])):
+    codes = state.get("codes", []) if state else []
+    if not state or state["index"] >= len(codes):
         district = state["district"] if state else "округ"
         text = f"✅ Все регионы округа «{district}» пройдены!"
         builder = InlineKeyboardBuilder()
@@ -655,9 +607,9 @@ async def show_district_card(update):
             await msg.answer(text, reply_markup=builder.as_markup())
         return
 
-    code = state["codes"][state["index"]]
+    code = codes[state["index"]]
     region = regions[code]
-    progress_text = f"{state['index'] + 1} / {len(state['codes'])}"
+    progress_text = f"{state['index'] + 1} / {len(codes)}"
 
     text = (
         f"📖 <b>{state['district']} — {progress_text}</b>\n\n"
@@ -677,10 +629,7 @@ async def show_district_card(update):
     img_path = get_image_path(code)
     if img_path and is_cb:
         photo = FSInputFile(img_path)
-        await msg.edit_media(
-            InputMediaPhoto(media=photo, caption=text, parse_mode="HTML"),
-            reply_markup=builder.as_markup(),
-        )
+        await msg.edit_media(InputMediaPhoto(media=photo, caption=text, parse_mode="HTML"), reply_markup=builder.as_markup())
     elif img_path:
         photo = FSInputFile(img_path)
         await msg.answer_photo(photo, caption=text, parse_mode="HTML", reply_markup=builder.as_markup())
@@ -701,7 +650,6 @@ async def next_district_card(callback: types.CallbackQuery):
         save_users(users)
     await show_district_card(callback)
 
-# ========== ТЕСТ ПО ОКРУГУ ==========
 @dp.callback_query(F.data == "district_test")
 async def district_test(callback: types.CallbackQuery):
     users, user = get_user(str(callback.from_user.id))
@@ -723,7 +671,7 @@ async def send_district_test_question(update):
 
     _, user = get_user(user_id)
     state = user.get("district_state")
-    codes_pool = state["codes"]
+    codes_pool = state.get("codes", [])
 
     code = random.choice(codes_pool)
     region = regions[code]
@@ -821,9 +769,9 @@ async def send_quiz_question(update):
         f"<b>Выбери правильное название:</b>"
     )
 
-    _, user = get_user(user_id)
+    users, user = get_user(user_id)
     user["quiz_state"] = {"code": code}
-    save_users(load_users())
+    save_users(users)
 
     blur_path = get_blur_path(code)
     if blur_path and is_cb:
@@ -904,9 +852,9 @@ async def send_match_question(update):
         f"<b>Выбери правильное название:</b>"
     )
 
-    _, user = get_user(user_id)
+    users, user = get_user(user_id)
     user["match_state"] = {"code": code}
-    save_users(load_users())
+    save_users(users)
 
     blur_path = get_blur_path(code)
     if blur_path and is_cb:
@@ -993,9 +941,9 @@ async def send_truefalse_question(update):
         f"<i>{region['hint']}</i>"
     )
 
-    _, user = get_user(user_id)
+    users, user = get_user(user_id)
     user["quiz_state"] = {"code": code}
-    save_users(load_users())
+    save_users(users)
 
     blur_path = get_blur_path(code)
     if blur_path and is_cb:
@@ -1085,9 +1033,9 @@ async def send_exam_question(update):
         f"Напиши ответ текстом:"
     )
 
-    _, user = get_user(user_id)
+    users, user = get_user(user_id)
     user["exam_state"] = {"code": code}
-    save_users(load_users())
+    save_users(users)
 
     if is_cb:
         await msg.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
@@ -1099,7 +1047,7 @@ async def send_exam_question(update):
 
 @dp.message()
 async def handle_exam_answer(message: types.Message):
-    _, user = get_user(str(message.chat.id))
+    users, user = get_user(str(message.chat.id))
     state = user.get("exam_state")
     if state is None:
         await message.answer("Используй меню. /start для перезапуска.", reply_markup=main_menu_kb())
@@ -1119,10 +1067,10 @@ async def handle_exam_answer(message: types.Message):
         await message.answer(f"❌ Неправильно. {code} — это {region['name']}.\n\n<i>{region['facts']}</i>")
 
     user["exam_state"] = None
-    save_users(load_users())
+    save_users(users)
     await asyncio.sleep(0.5)
     await send_exam_question(message)
-    
+
 # ========== ЗАПУСК ==========
 async def health_check(request):
     return web.Response(text="OK")
