@@ -742,7 +742,7 @@ async def handle_distest(callback: types.CallbackQuery):
     chosen_code = parts[2]
     is_correct = (correct_code == chosen_code)
 
-    update_stats(str(callback.from_user.id), correct=is_correct, mode="quiz", code=correct_code)
+    update_stats(str(callback.from_user.id), correct=is_correct)
 
     if is_correct:
         await callback.answer(f"✅ Правильно! {correct_code} — {regions[correct_code]['name']}.", show_alert=True)
@@ -756,6 +756,7 @@ async def handle_distest(callback: types.CallbackQuery):
         builder = InlineKeyboardBuilder()
         builder.button(text="▶️ Дальше", callback_data="district_test")
         builder.button(text="🗺 Выбрать другой", callback_data="mode_district")
+        builder.row(InlineKeyboardButton(text="🏠 В главное меню", callback_data="to_menu"))
         builder.adjust(1)
 
         img_path = get_image_path(correct_code)
