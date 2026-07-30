@@ -566,6 +566,10 @@ async def district_selected(callback: types.CallbackQuery):
     users, user = get_user(str(callback.from_user.id))
     user["district_state"] = {"district": district, "index": 0, "codes": codes.copy()}
     save_users(users)
+    
+    # Отладка
+    users2, user2 = get_user(str(callback.from_user.id))
+    await callback.answer(f"Сохранено: {user2.get('district_state')}", show_alert=True)
 
     builder = InlineKeyboardBuilder()
     builder.button(text="📖 Карточки округа", callback_data="district_cards")
