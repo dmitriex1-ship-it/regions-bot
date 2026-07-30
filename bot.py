@@ -549,42 +549,6 @@ async def mode_district(callback: types.CallbackQuery):
     await callback.message.edit_text("🗺 Выбери федеральный округ:", reply_markup=district_menu_kb())
     await callback.answer()
 
-@dp.callback_query(F.data.startswith("district_"))
-async def district_selected(callback: types.CallbackQuery):
-    # Пропускаем "district_cards" и "district_test"
-    if callback.data in ("district_cards", "district_test"):
-        await callback.answer()
-        return
-    
-    district = callback.data.replace("district_", "")
-    codes = DISTRICTS.get(district, [])
-    if not codes:
-        await callback.answer(f"Округ не найден: '{district}'", show_alert=True)
-        return
-    # ... остальной код без изменений
-
-    users, user = get_user(str(callback.from_user.id))
-    user["district_state"] = {"district": district, "index": 0, "codes": codes.copy()}
-    save_users(users)
-    
-    # Отладка
-    users2, user2 = get_user(str(callback.from_user.id))
-    await callback.answer(f"Сохранено: {user2.get('district_state')}", show_alert=True)
-
-    builder = InlineKeyboardBuilder()
-    builder.button(text="📖 Карточки округа", callback_data="district_cards")
-    builder.button(text="🧪 Тест по округу", callback_data="district_test")
-    builder.button(text="🗺 Выбрать другой", callback_data="mode_district")
-    builder.button(text="📚 К изучению", callback_data="go_study_menu")
-    builder.adjust(1)
-
-    await callback.message.edit_text(
-        f"🗺 <b>{district}</b> — {len(codes)} регионов.\nВыбери действие:",
-        parse_mode="HTML",
-        reply_markup=builder.as_markup(),
-    )
-    await callback.answer()
-
 @dp.callback_query(F.data == "district_cards")
 async def district_cards(callback: types.CallbackQuery):
     await callback.answer("Зашёл в district_cards", show_alert=True)
@@ -604,58 +568,6 @@ async def district_cards(callback: types.CallbackQuery):
     
     text = (
         f"📖 <b>{state['district']} — 1/{len(codes)}</b>\n\n"
-        f"Код: <b>{code}</b>\n"
-        f"Регион: <b>{region['name']}</b>\n\n"
-        f"💡 <i>{region['hint']}</i>\n"
-        f"💡 <i>{region['hint2']}</i>\n\n"
-        f"📌 {region['facts']}"
-    )
-    
-    builder = InlineKeyboardBuilder()
-    builder.button(text="▶️ Дальше", callback_data="next_district_card")
-    builder.button(text="🧪 Тест по округу", callback_data="district_test")
-    builder.button(text="🗺 Выбрать другой", callback_data="mode_district")
-    builder.adjust(1)
-    
-    img_path = get_image_path(code)
-    if img_path:
-        photo = FSInputFile(img_path)
-        await callback.message.reply_photo(photo, caption=text, parse_mode="HTML", reply_markup=builder.as_markup())
-    else:
-        await callback.message.reply(text, parse_mode="HTML", reply_markup=builder.as_markup())
-    
-    await callback.answer()
-
-@dp.callback_query(F.data == "next_district_card")
-async def next_district_card(callback: types.CallbackQuery):
-    users, user = get_user(str(callback.from_user.id))
-    state = user.get("district_state")
-    if not state:
-        await callback.answer("Сначала выбери округ", show_alert=True)
-        return
-    
-    state["index"] += 1
-    save_users(users)
-    
-    codes = state["codes"]
-    if state["index"] >= len(codes):
-        await callback.message.reply(
-            f"✅ Все регионы округа «{state['district']}» пройдены!",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="🧪 Тест по округу", callback_data="district_test")],
-                [InlineKeyboardButton(text="🗺 Выбрать другой", callback_data="mode_district")],
-                [InlineKeyboardButton(text="📚 К изучению", callback_data="go_study_menu")],
-            ])
-        )
-        await callback.answer()
-        return
-    
-    code = codes[state["index"]]
-    region = regions[code]
-    progress = f"{state['index'] + 1}/{len(codes)}"
-    
-    text = (
-        f"📖 <b>{state['district']} — {progress}</b>\n\n"
         f"Код: <b>{code}</b>\n"
         f"Регион: <b>{region['name']}</b>\n\n"
         f"💡 <i>{region['hint']}</i>\n"
@@ -728,6 +640,89 @@ async def send_district_test_question(update):
         await msg.answer(text, parse_mode="HTML", reply_markup=builder.as_markup())
     if isinstance(update, types.CallbackQuery):
         await update.answer()
+
+@dp.callback_query(F.data.startswith("district_"))
+async def district_selected(callback: types.CallbackQuery):
+    district = callback.data.replace("district_", "")
+    codes = DISTRICTS.get(district, [])
+    if not codes:
+        await callback.answer(f"Округ не найден: '{district}'", show_alert=True)
+        return
+    # ... остальной код без изменений
+
+    users, user = get_user(str(callback.from_user.id))
+    user["district_state"] = {"district": district, "index": 0, "codes": codes.copy()}
+    save_users(users)
+    
+    # Отладка
+    users2, user2 = get_user(str(callback.from_user.id))
+    await callback.answer(f"Сохранено: {user2.get('district_state')}", show_alert=True)
+
+    builder = InlineKeyboardBuilder()
+    builder.button(text="📖 Карточки округа", callback_data="district_cards")
+    builder.button(text="🧪 Тест по округу", callback_data="district_test")
+    builder.button(text="🗺 Выбрать другой", callback_data="mode_district")
+    builder.button(text="📚 К изучению", callback_data="go_study_menu")
+    builder.adjust(1)
+
+    await callback.message.edit_text(
+        f"🗺 <b>{district}</b> — {len(codes)} регионов.\nВыбери действие:",
+        parse_mode="HTML",
+        reply_markup=builder.as_markup(),
+    )
+    await callback.answer()
+
+@dp.callback_query(F.data == "next_district_card")
+async def next_district_card(callback: types.CallbackQuery):
+    users, user = get_user(str(callback.from_user.id))
+    state = user.get("district_state")
+    if not state:
+        await callback.answer("Сначала выбери округ", show_alert=True)
+        return
+    
+    state["index"] += 1
+    save_users(users)
+    
+    codes = state["codes"]
+    if state["index"] >= len(codes):
+        await callback.message.reply(
+            f"✅ Все регионы округа «{state['district']}» пройдены!",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="🧪 Тест по округу", callback_data="district_test")],
+                [InlineKeyboardButton(text="🗺 Выбрать другой", callback_data="mode_district")],
+                [InlineKeyboardButton(text="📚 К изучению", callback_data="go_study_menu")],
+            ])
+        )
+        await callback.answer()
+        return
+    
+    code = codes[state["index"]]
+    region = regions[code]
+    progress = f"{state['index'] + 1}/{len(codes)}"
+    
+    text = (
+        f"📖 <b>{state['district']} — {progress}</b>\n\n"
+        f"Код: <b>{code}</b>\n"
+        f"Регион: <b>{region['name']}</b>\n\n"
+        f"💡 <i>{region['hint']}</i>\n"
+        f"💡 <i>{region['hint2']}</i>\n\n"
+        f"📌 {region['facts']}"
+    )
+    
+    builder = InlineKeyboardBuilder()
+    builder.button(text="▶️ Дальше", callback_data="next_district_card")
+    builder.button(text="🧪 Тест по округу", callback_data="district_test")
+    builder.button(text="🗺 Выбрать другой", callback_data="mode_district")
+    builder.adjust(1)
+    
+    img_path = get_image_path(code)
+    if img_path:
+        photo = FSInputFile(img_path)
+        await callback.message.reply_photo(photo, caption=text, parse_mode="HTML", reply_markup=builder.as_markup())
+    else:
+        await callback.message.reply(text, parse_mode="HTML", reply_markup=builder.as_markup())
+    
+    await callback.answer()
 
 @dp.callback_query(F.data.startswith("distest_"))
 async def handle_distest(callback: types.CallbackQuery):
