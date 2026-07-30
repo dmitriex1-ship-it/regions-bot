@@ -278,11 +278,11 @@ async def cb_stats(callback: types.CallbackQuery):
         worst.sort(key=lambda x: x[1]["correct"] / x[1]["total"])
         worst = worst[:5]
         if worst:
-            text += "\n<b>🔴 Сложные регионы:</b>\n"
+            text += "\n<b>🔴 Сложные регионы (ошибок %):</b>\n"
             for code, s in worst:
                 name = regions.get(code, {}).get("name", code)
-                p = (s["correct"] / max(s["total"], 1)) * 100
-                text += f"{code} — {name}: {p:.0f}%\n"
+                error_pct = 100 - (s["correct"] / max(s["total"], 1)) * 100
+                text += f"{code} — {name}: {error_pct:.0f}%\n"
 
     builder = InlineKeyboardBuilder()
     builder.button(text="🔄 Обновить", callback_data="stats")
@@ -580,7 +580,7 @@ async def district_cards(callback: types.CallbackQuery):
     users, user = get_user(str(callback.from_user.id))
     state = user.get("district_state")
     if not state or not state.get("codes"):
-        await callback.answer("Сначала выбери округ", show_alert=True)
+        await callback.answer(f"Округ не выбран. state={state}", show_alert=True)
         return
     state["index"] = 0
     save_users(users)
