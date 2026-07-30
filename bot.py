@@ -554,7 +554,7 @@ async def district_selected(callback: types.CallbackQuery):
     district = callback.data.replace("district_", "")
     codes = DISTRICTS.get(district, [])
     if not codes:
-        await callback.answer("Округ не найден", show_alert=True)
+        await callback.answer(f"Округ не найден: '{district}'. Доступны: {list(DISTRICTS.keys())}", show_alert=True)
         return
 
     users, user = get_user(str(callback.from_user.id))
