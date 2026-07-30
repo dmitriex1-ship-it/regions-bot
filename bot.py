@@ -551,11 +551,16 @@ async def mode_district(callback: types.CallbackQuery):
 
 @dp.callback_query(F.data.startswith("district_"))
 async def district_selected(callback: types.CallbackQuery):
+    # Пропускаем "district_cards" и "district_test"
+    if callback.data in ("district_cards", "district_test"):
+        return
+    
     district = callback.data.replace("district_", "")
     codes = DISTRICTS.get(district, [])
     if not codes:
-        await callback.answer(f"Округ не найден: '{district}'. Доступны: {list(DISTRICTS.keys())}", show_alert=True)
+        await callback.answer(f"Округ не найден: '{district}'", show_alert=True)
         return
+    # ... остальной код без изменений
 
     users, user = get_user(str(callback.from_user.id))
     user["district_state"] = {"district": district, "index": 0, "codes": codes.copy()}
