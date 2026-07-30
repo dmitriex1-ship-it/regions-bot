@@ -1090,7 +1090,7 @@ async def handle_exam_answer(message: types.Message):
     code = state["code"]
     region = regions[code]
     user_answer = message.text.strip().lower()
-    correct_names = [region["name"].lower()]
+    correct_names = [region["name"].lower()] + [a.lower() for a in region.get("aliases", [])]
     is_correct = any(name in user_answer or user_answer in name for name in correct_names)
 
     update_stats(str(message.chat.id), correct=is_correct, mode="exam", code=code)
