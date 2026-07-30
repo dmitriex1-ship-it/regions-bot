@@ -1095,6 +1095,7 @@ async def handle_exam_answer(message: types.Message):
     is_correct = any(name in user_answer or user_answer in name for name in correct_names)
 
     update_stats(str(message.chat.id), correct=is_correct, mode="exam", code=code)
+    await message.answer(f"Отладка: exam_total={user.get('exam_total')}, exam_correct={user.get('exam_correct')}")
 
     if is_correct:
         await message.answer(f"✅ Правильно! Это {code} — {region['name']}.")
