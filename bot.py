@@ -1098,7 +1098,10 @@ async def handle_exam_answer(message: types.Message):
     if is_correct:
         await message.answer(f"✅ Правильно! Это {code} — {region['name']}.")
     else:
-        await message.answer(f"❌ Неправильно. {code} — это {region['name']}.\n\n<i>{region['facts']}</i>")
+        await message.answer(
+            f"❌ Неправильно. {code} — это {region['name']}.\n\n{region['facts']}",
+            parse_mode="HTML"
+        )
 
     user["exam_state"] = None
     save_users(users)
