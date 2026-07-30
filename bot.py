@@ -587,8 +587,10 @@ async def district_selected(callback: types.CallbackQuery):
 
 @dp.callback_query(F.data == "district_cards")
 async def district_cards(callback: types.CallbackQuery):
+    await callback.answer("Зашёл в district_cards", show_alert=True)
     users, user = get_user(str(callback.from_user.id))
     state = user.get("district_state")
+    ...
     if not state or not state.get("codes"):
         await callback.answer("Сначала выбери округ", show_alert=True)
         return
