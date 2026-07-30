@@ -584,8 +584,9 @@ async def district_selected(callback: types.CallbackQuery):
 async def district_cards(callback: types.CallbackQuery):
     users, user = get_user(str(callback.from_user.id))
     state = user.get("district_state")
+    await callback.answer(f"State: {state}", show_alert=True)
     if not state or not state.get("codes"):
-        await callback.answer(f"Округ не выбран. state={state}", show_alert=True)
+        await callback.answer("Сначала выбери округ", show_alert=True)
         return
     state["index"] = 0
     save_users(users)
