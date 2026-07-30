@@ -158,6 +158,7 @@ def main_menu_kb():
         [InlineKeyboardButton(text="🎮 Тренировка", callback_data="go_game_menu")],
         [InlineKeyboardButton(text="📝 Экзамен", callback_data="mode_exam")],
         [InlineKeyboardButton(text="📊 Статистика", callback_data="stats")],
+        [InlineKeyboardButton(text="🏆 Рейтинг", callback_data="rating")],
     ])
 
 def study_menu_kb():
@@ -1181,6 +1182,42 @@ async def prev_ordered(callback: types.CallbackQuery):
         state["index"] -= 1
         save_users(users)
     await show_ordered(callback)
+
+@dp.callback_query(F.data == "rating")
+async def cb_rating(callback: types.CallbackQuery):
+    users = load_users()
+    ranking = []
+    for uid, data in users.items():
+        exam_total = data.get("exam_total", 0)
+        exam_correct = data.get("exam_correct", 0)
+        if exam_total > 0:
+            pct = (exam_correct / exam_total) * 100
+            ranking.append((uid, exam_correct, exam_total, pct))
+    
+    ranking.sort(key=lambda x: (-x[3], -x[2]))
+    
+    text = "🏆 <b>Рейтинг по экзамену</b>\n\n"
+    if not ranking:
+        text += "Пока никто не проходил экзамен."
+    else:
+        for i, (uid, correct, total, pct) in enumerate(ranking[:10], 1):
+            try:
+                chat = await bot.get_chat(uid)
+                name = chat.first_name or uid
+            except:
+                name = uid
+            text += f"{i}. {name}: {correct}/{total} ({pct:.0f}%)\n"
+    
+    builder = InlineKeyboardBuilder()
+    builder.button(text="🔄 Обновить", callback_data="rating")
+    builder.button(text="🏠 В главное меню", callback_data="to_menu")
+    builder.adjust(1)
+    
+    try:
+        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
+    except:
+        pass
+    await callback.answer()
 
 # ========== ЗАПУСК ==========
 async def health_check(request):
