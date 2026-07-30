@@ -161,10 +161,9 @@ def main_menu_kb():
 
 def study_menu_kb():
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📖 Карточки (все)", callback_data="mode_cards_all")],
+        [InlineKeyboardButton(text="📖 Регионы с ассоциациями", callback_data="mode_cards_all")],
+        [InlineKeyboardButton(text="📜 Регионы по порядку", callback_data="mode_ordered")],
         [InlineKeyboardButton(text="🗺 По округам", callback_data="mode_district")],
-        [InlineKeyboardButton(text="📜 По порядку", callback_data="mode_ordered")],
-        [InlineKeyboardButton(text="🧩 Тест «Соседи»", callback_data="mode_neighbors")],
         [InlineKeyboardButton(text="🏠 В главное меню", callback_data="to_menu")],
     ])
 
@@ -173,6 +172,7 @@ def game_menu_kb():
         [InlineKeyboardButton(text="🎯 Угадай по ассоциации", callback_data="mode_quiz")],
         [InlineKeyboardButton(text="🧩 Найди пару", callback_data="mode_match")],
         [InlineKeyboardButton(text="⚡ Верно / Неверно", callback_data="mode_truefalse")],
+        [InlineKeyboardButton(text="🧩 Тест «Соседи»", callback_data="mode_neighbors")],
         [InlineKeyboardButton(text="📝 Экзамен", callback_data="mode_exam")],
         [InlineKeyboardButton(text="🏠 В главное меню", callback_data="to_menu")],
     ])
@@ -365,9 +365,12 @@ async def show_card(update):
     )
 
     builder = InlineKeyboardBuilder()
-    builder.button(text="▶️ Дальше", callback_data="next_card")
-    builder.button(text="📚 К изучению", callback_data="go_study_menu")
-    builder.adjust(1)
+    nav_buttons = []
+    if state["index"] > 0:
+        nav_buttons.append(InlineKeyboardButton(text="⬅️ Назад", callback_data="prev_card"))
+    nav_buttons.append(InlineKeyboardButton(text="▶️ Дальше", callback_data="next_card"))
+    builder.row(*nav_buttons)
+    builder.row(InlineKeyboardButton(text="📚 К изучению", callback_data="go_study_menu"))
 
     img_path = get_image_path(code)
     if img_path and is_cb:
@@ -435,9 +438,12 @@ async def show_ordered(update):
     )
 
     builder = InlineKeyboardBuilder()
-    builder.button(text="▶️ Дальше", callback_data="next_ordered")
-    builder.button(text="📚 К изучению", callback_data="go_study_menu")
-    builder.adjust(1)
+    nav_buttons = []
+    if state["index"] > 0:
+        nav_buttons.append(InlineKeyboardButton(text="⬅️ Назад", callback_data="prev_ordered"))
+    nav_buttons.append(InlineKeyboardButton(text="▶️ Дальше", callback_data="next_ordered"))
+    builder.row(*nav_buttons)
+    builder.row(InlineKeyboardButton(text="📚 К изучению", callback_data="go_study_menu"))
 
     img_path = get_image_path(code)
     if img_path and is_cb:
@@ -1122,6 +1128,24 @@ async def prev_district_card(callback: types.CallbackQuery):
         state["index"] -= 1
         save_users(users)
     await show_district_card(callback)
+
+@dp.callback_query(F.data == "prev_card")
+async def prev_card(callback: types.CallbackQuery):
+    users, user = get_user(str(callback.from_user.id))
+    state = user.get("ordered_state")
+    if state and state["index"] > 0:
+        state["index"] -= 1
+        save_users(users)
+    await show_card(callback)
+
+@dp.callback_query(F.data == "prev_ordered")
+async def prev_ordered(callback: types.CallbackQuery):
+    users, user = get_user(str(callback.from_user.id))
+    state = user.get("ordered_state")
+    if state and state["index"] > 0:
+        state["index"] -= 1
+        save_users(users)
+    await show_ordered(callback)
 
 # ========== ЗАПУСК ==========
 async def health_check(request):
