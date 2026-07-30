@@ -590,34 +590,34 @@ async def district_cards(callback: types.CallbackQuery):
         return
     state["index"] = 0
     save_users(users)
+    # Отправляем новое сообщение, а не редактируем меню
+    await bot.send_message(
+        chat_id=callback.from_user.id,
+        text="Загружаю карточки...",
+    )
     await show_district_card(callback)
 
 async def show_district_card(update):
     if isinstance(update, types.CallbackQuery):
         user_id = str(update.from_user.id)
         msg = update.message
-        is_cb = True
     else:
         user_id = str(update.chat.id)
         msg = update
-        is_cb = False
 
-    _, user = get_user(user_id)
+    users, user = get_user(user_id)
     state = user.get("district_state")
     if not state:
         return
     codes = state.get("codes", [])
     if not codes or state["index"] >= len(codes):
-        district = state["district"] if state else "округ"
+        district = state.get("district", "округ")
         text = f"✅ Все регионы округа «{district}» пройдены!"
         builder = InlineKeyboardBuilder()
         builder.button(text="🧪 Тест по округу", callback_data="district_test")
         builder.button(text="🗺 Выбрать другой", callback_data="mode_district")
         builder.button(text="📚 К изучению", callback_data="go_study_menu")
-        if is_cb:
-            await msg.edit_text(text, reply_markup=builder.as_markup())
-        else:
-            await msg.answer(text, reply_markup=builder.as_markup())
+        await bot.send_message(chat_id=user_id, text=text, reply_markup=builder.as_markup())
         return
 
     code = codes[state["index"]]
@@ -640,16 +640,11 @@ async def show_district_card(update):
     builder.adjust(1)
 
     img_path = get_image_path(code)
-    if img_path and is_cb:
+    if img_path:
         photo = FSInputFile(img_path)
-        await msg.edit_media(InputMediaPhoto(media=photo, caption=text, parse_mode="HTML"), reply_markup=builder.as_markup())
-    elif img_path:
-        photo = FSInputFile(img_path)
-        await msg.answer_photo(photo, caption=text, parse_mode="HTML", reply_markup=builder.as_markup())
-    elif is_cb:
-        await msg.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
+        await bot.send_photo(chat_id=user_id, photo=photo, caption=text, parse_mode="HTML", reply_markup=builder.as_markup())
     else:
-        await msg.answer(text, parse_mode="HTML", reply_markup=builder.as_markup())
+        await bot.send_message(chat_id=user_id, text=text, parse_mode="HTML", reply_markup=builder.as_markup())
 
     if isinstance(update, types.CallbackQuery):
         await update.answer()
