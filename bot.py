@@ -1094,19 +1094,36 @@ async def handle_exam_answer(message: types.Message):
     correct_names = [region["name"].lower()] + [a.lower() for a in region.get("aliases", [])]
     is_correct = any(name in user_answer or user_answer in name for name in correct_names)
 
-    update_stats(str(message.chat.id), correct=is_correct, mode="exam", code=code)
-    await message.answer(f"Отладка: exam_total={user.get('exam_total')}, exam_correct={user.get('exam_correct')}")
+    user["total"] += 1
+    user["exam_total"] += 1
+    if is_correct:
+        user["correct"] += 1
+        user["exam_correct"] += 1
+    else:
+        user["wrong"] += 1
+
+    if code:
+        eff = DOP_TO_MAIN.get(code, code)
+        if eff not in user["region_stats"]:
+            user["region_stats"][eff] = {"correct": 0, "total": 0}
+        user["region_stats"][eff]["total"] += 1
+        if is_correct:
+            user["region_stats"][eff]["correct"] += 1
+
+    user["exam_state"] = None
+    save_users(users)
 
     if is_correct:
         await message.answer(f"✅ Правильно! Это {code} — {region['name']}.")
     else:
+        builder = InlineKeyboardBuilder()
+        builder.row(InlineKeyboardButton(text="🏠 В главное меню", callback_data="to_menu"))
         await message.answer(
             f"❌ Неправильно. {code} — это {region['name']}.\n\n{region['facts']}",
-            parse_mode="HTML"
+            parse_mode="HTML",
+            reply_markup=builder.as_markup()
         )
 
-    user["exam_state"] = None
-    save_users(users)
     await asyncio.sleep(0.5)
     await send_exam_question(message)
 
