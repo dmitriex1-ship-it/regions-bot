@@ -705,47 +705,58 @@ async def next_district_card(callback: types.CallbackQuery):
     state["index"] += 1
     save_users(users)
     await show_district_card(callback)
-    
-    codes = state["codes"]
-    if state["index"] >= len(codes):
-        await callback.message.reply(
-            f"✅ Все регионы округа «{state['district']}» пройдены!",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="🧪 Тест по округу", callback_data="district_test")],
-                [InlineKeyboardButton(text="🗺 Выбрать другой", callback_data="mode_district")],
-                [InlineKeyboardButton(text="📚 К изучению", callback_data="go_study_menu")],
-            ])
-        )
-        await callback.answer()
+
+async def show_district_card(update):
+    if isinstance(update, types.CallbackQuery):
+        user_id = str(update.from_user.id)
+        msg = update.message
+    else:
+        user_id = str(update.chat.id)
+        msg = update
+
+    _, user = get_user(user_id)
+    state = user.get("district_state")
+    if not state:
         return
-    
+    codes = state.get("codes", [])
+    if state["index"] >= len(codes):
+        district = state.get("district", "округ")
+        text = f"✅ Все регионы округа «{district}» пройдены!"
+        builder = InlineKeyboardBuilder()
+        builder.button(text="🧪 Тест по округу", callback_data="district_test")
+        builder.button(text="🗺 Выбрать другой", callback_data="mode_district")
+        builder.button(text="📚 К изучению", callback_data="go_study_menu")
+        await msg.edit_text(text, reply_markup=builder.as_markup())
+        return
+
     code = codes[state["index"]]
     region = regions[code]
-    progress = f"{state['index'] + 1}/{len(codes)}"
-    
+    progress_text = f"{state['index'] + 1} / {len(codes)}"
+
     text = (
-        f"📖 <b>{state['district']} — {progress}</b>\n\n"
+        f"📖 <b>{state['district']} — {progress_text}</b>\n\n"
         f"Код: <b>{code}</b>\n"
         f"Регион: <b>{region['name']}</b>\n\n"
         f"💡 <i>{region['hint']}</i>\n"
         f"💡 <i>{region['hint2']}</i>\n\n"
         f"📌 {region['facts']}"
     )
-    
+
     builder = InlineKeyboardBuilder()
     builder.button(text="▶️ Дальше", callback_data="next_district_card")
     builder.button(text="🧪 Тест по округу", callback_data="district_test")
     builder.button(text="🗺 Выбрать другой", callback_data="mode_district")
     builder.adjust(1)
-    
+
     img_path = get_image_path(code)
     if img_path:
         photo = FSInputFile(img_path)
-        await callback.message.reply_photo(photo, caption=text, parse_mode="HTML", reply_markup=builder.as_markup())
+        await msg.edit_media(InputMediaPhoto(media=photo, caption=text, parse_mode="HTML"), reply_markup=builder.as_markup())
     else:
-        await callback.message.reply(text, parse_mode="HTML", reply_markup=builder.as_markup())
-    
-    await callback.answer()
+        await msg.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
+
+    if isinstance(update, types.CallbackQuery):
+        await update.answer()
 
 @dp.callback_query(F.data.startswith("distest_"))
 async def handle_distest(callback: types.CallbackQuery):
