@@ -290,7 +290,7 @@ async def cb_stats(callback: types.CallbackQuery):
 
     builder = InlineKeyboardBuilder()
     builder.button(text="🔄 Обновить", callback_data="stats")
-    builder.button(text="🗑 Сбросить", callback_data="reset_stats_confirm")
+    builder.button(text="🗑 Сбросить статистику", callback_data="reset_stats_confirm")
     builder.button(text="🏠 В главное меню", callback_data="to_menu")
     builder.adjust(1)
 
@@ -300,27 +300,38 @@ async def cb_stats(callback: types.CallbackQuery):
 @dp.callback_query(F.data == "reset_stats_confirm")
 async def reset_stats_confirm(callback: types.CallbackQuery):
     builder = InlineKeyboardBuilder()
-    builder.button(text="✅ Да, сбросить", callback_data="reset_stats_yes")
+    builder.button(text="📝 Сбросить только экзамен", callback_data="reset_exam_only")
+    builder.button(text="📊 Сбросить игры и регионы", callback_data="reset_stats_yes")
     builder.button(text="❌ Отмена", callback_data="stats")
-    builder.adjust(2)
-    await callback.message.edit_text("🗑 <b>Точно сбросить всю статистику?</b>", parse_mode="HTML", reply_markup=builder.as_markup())
+    builder.adjust(1)
+    await callback.message.edit_text(
+        "🗑 <b>Что сбросить?</b>\n\n📝 Экзамен — рейтинг обнулится\n📊 Игры — ассоциации, пары, верно/неверно\n\nЭкзамен сохранится при сбросе игр.",
+        parse_mode="HTML",
+        reply_markup=builder.as_markup(),
+    )
     await callback.answer()
 
 @dp.callback_query(F.data == "reset_stats_yes")
 async def reset_stats_yes(callback: types.CallbackQuery):
     users = load_users()
-    users[str(callback.from_user.id)] = {
+    uid = str(callback.from_user.id)
+    # Сохраняем рейтинговые данные
+    exam_total = users[uid].get("exam_total", 0)
+    exam_correct = users[uid].get("exam_correct", 0)
+    
+    users[uid] = {
         "total": 0, "correct": 0, "wrong": 0, "hints_used": 0,
         "quiz_total": 0, "quiz_correct": 0,
         "match_total": 0, "match_correct": 0,
         "tf_total": 0, "tf_correct": 0,
-        "exam_total": 0, "exam_correct": 0,
+        "exam_total": exam_total,
+        "exam_correct": exam_correct,
         "quiz_state": None, "match_state": None, "exam_state": None,
         "district_state": None, "ordered_state": None, "neighbors_state": None,
         "region_stats": {},
     }
     save_users(users)
-    await callback.message.edit_text("✅ Статистика сброшена!", reply_markup=back_kb())
+    await callback.message.edit_text("✅ Статистика сброшена! Рейтинг сохранён.", reply_markup=back_kb())
     await callback.answer()
 
 # ========== РЕЖИМ: КАРТОЧКИ (ВСЕ) ==========
@@ -1217,6 +1228,17 @@ async def cb_rating(callback: types.CallbackQuery):
         await callback.message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
     except:
         pass
+    await callback.answer()
+
+@dp.callback_query(F.data == "reset_exam_only")
+async def reset_exam_only(callback: types.CallbackQuery):
+    users = load_users()
+    uid = str(callback.from_user.id)
+    if uid in users:
+        users[uid]["exam_total"] = 0
+        users[uid]["exam_correct"] = 0
+        save_users(users)
+    await callback.message.edit_text("✅ Статистика экзамена сброшена! Рейтинг обнулён.", reply_markup=back_kb())
     await callback.answer()
 
 # ========== ЗАПУСК ==========
