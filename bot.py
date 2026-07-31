@@ -506,23 +506,39 @@ async def send_neighbors_question(update):
 
     left_name = regions[left_code]["name"]
     right_name = regions[right_code]["name"]
+    correct_name = regions[correct_code]["name"]
 
+    # Убираем (доп.) из названий для кнопок
+    left_short = left_name.replace(" (доп.)", "")
+    right_short = right_name.replace(" (доп.)", "")
+    correct_short = correct_name.replace(" (доп.)", "")
+
+    # Ищем регионы на ту же букву
+    first_letter = correct_short[0].upper()
+    same_letter = [c for c in ALL_CODES if c != correct_code 
+                   and regions[c]["name"].replace(" (доп.)", "")[0].upper() == first_letter]
+    
     other = [c for c in ALL_CODES if c != correct_code]
-    wrong = random.sample(other, min(3, len(other)))
+    if len(same_letter) >= 3:
+        wrong = random.sample(same_letter, 3)
+    else:
+        wrong = random.sample(other, min(3, len(other)))
+    
     options = wrong + [correct_code]
     random.shuffle(options)
 
     builder = InlineKeyboardBuilder()
     for opt in options:
-        builder.button(text=regions[opt]["name"], callback_data=f"neighbors_{correct_code}_{opt}")
+        name = regions[opt]["name"].replace(" (доп.)", "")
+        builder.button(text=name, callback_data=f"neighbors_{correct_code}_{opt}")
     builder.adjust(1)
     builder.row(InlineKeyboardButton(text="📚 К изучению", callback_data="go_study_menu"))
 
     text = (
-        f"🤝 <b>Игра «Соседи»</b>\n\n"
-        f"{left_code} — <b>{left_name}</b>\n"
+        f"🧩 <b>Игра «Соседи»</b>\n\n"
+        f"{left_code} — <b>{left_short}</b>\n"
         f"❓ — <b>???</b>\n"
-        f"{right_code} — <b>{right_name}</b>\n\n"
+        f"{right_code} — <b>{right_short}</b>\n\n"
         f"Какой регион между ними?"
     )
 
@@ -812,6 +828,8 @@ async def send_quiz_question(update):
     for opt in options:
         builder.button(text=f"{regions[opt]['name']}", callback_data=f"quiz_answer_{code}_{opt}")
     builder.adjust(1)
+    if image_exists(code):
+        builder.row(InlineKeyboardButton(text="💡 Подсказка", callback_data=f"unblur_{code}"))
     builder.row(InlineKeyboardButton(text="🏠 В главное меню", callback_data="to_menu"))
 
     text = (
@@ -897,6 +915,8 @@ async def send_match_question(update):
     for opt in options:
         builder.button(text=f"{regions[opt]['name']}", callback_data=f"match_answer_{code}_{opt}")
     builder.adjust(1)
+    if image_exists(code):
+        builder.row(InlineKeyboardButton(text="💡 Подсказка", callback_data=f"unblur_{code}"))
     builder.row(InlineKeyboardButton(text="🏠 В главное меню", callback_data="to_menu"))
 
     text = (
@@ -982,10 +1002,12 @@ async def send_truefalse_question(update):
         shown_name = regions[wrong_code]["name"]
         correct_answer = False
 
-    builder = InlineKeyboardBuilder()
+   builder = InlineKeyboardBuilder()
     builder.button(text="✅ Да", callback_data=f"tf_{code}_{correct_answer}_true")
     builder.button(text="❌ Нет", callback_data=f"tf_{code}_{correct_answer}_false")
     builder.adjust(2)
+    if image_exists(code):
+        builder.row(InlineKeyboardButton(text="💡 Подсказка", callback_data=f"unblur_{code}"))
     builder.row(InlineKeyboardButton(text="🏠 В главное меню", callback_data="to_menu"))
 
     text = (
@@ -1245,6 +1267,19 @@ async def reset_exam_only(callback: types.CallbackQuery):
         users[uid]["exam_correct"] = 0
         save_users(users)
     await callback.message.edit_text("✅ Статистика экзамена сброшена! Рейтинг обнулён.", reply_markup=back_kb())
+    await callback.answer()
+
+@dp.callback_query(F.data.startswith("unblur_"))
+async def unblur_image(callback: types.CallbackQuery):
+    code = callback.data.replace("unblur_", "")
+    img_path = get_image_path(code)
+    if img_path:
+        photo = FSInputFile(img_path)
+        await callback.message.reply_photo(
+            photo,
+            caption=f"🗺 <b>{code} — {regions[code]['name']}</b>\n\n<i>{regions[code]['facts']}</i>",
+            parse_mode="HTML",
+        )
     await callback.answer()
 
 # ========== ЗАПУСК ==========
