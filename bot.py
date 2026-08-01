@@ -824,7 +824,7 @@ async def send_quiz_question(update):
     options = wrong_codes + [code]
     random.shuffle(options)
 
-    builder = InlineKeyboardBuilder()
+   builder = InlineKeyboardBuilder()
     for opt in options:
         builder.button(text=f"{regions[opt]['name']}", callback_data=f"quiz_answer_{code}_{opt}")
     builder.adjust(1)
