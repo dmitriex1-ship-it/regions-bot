@@ -525,25 +525,29 @@ async def send_neighbors_question(update):
         wrong = random.sample(other, min(3, len(other)))
     
     options = wrong + [correct_code]
-    seen = set()
-    unique_options = []
-    for opt in options:
-        name = regions[opt]["name"].replace(" (доп.)", "")
-        if name not in seen:
-            seen.add(name)
-            unique_options.append(opt)
-    options = wrong + [correct_code]
+    # Убираем левый и правый регионы из вариантов
+    options = [c for c in options if c not in (left_code, right_code)]
     # Убираем дубли по названию
     seen = set()
-    unique_options = []
-    for opt in options:
-        name = regions[opt]["name"].replace(" (доп.)", "")
+    unique = []
+    for c in options:
+        name = regions[c]["name"].replace(" (доп.)", "")
         if name not in seen:
             seen.add(name)
-            unique_options.append(opt)
-    options = unique_options
+            unique.append(c)
+    options = unique
+    # Если меньше 4 — добираем случайными, исключая левый и правый
+    while len(options) < 4:
+        pool = [c for c in ALL_CODES if c not in options and c not in (left_code, right_code)]
+        if not pool:
+            break
+        extra = random.choice(pool)
+        name = regions[extra]["name"].replace(" (доп.)", "")
+        if name not in seen:
+            seen.add(name)
+            options.append(extra)
     random.shuffle(options)
-
+    
     builder = InlineKeyboardBuilder()
     for opt in options:
         name = regions[opt]["name"].replace(" (доп.)", "")
@@ -839,7 +843,6 @@ async def send_quiz_question(update):
     other_codes = [c for c in ALL_CODES if c != code]
     wrong_codes = random.sample(other_codes, min(3, len(other_codes)))
     options = wrong_codes + [code]
-    # Убираем дубли по названию
     seen = set()
     unique = []
     for c in options:
@@ -848,6 +851,15 @@ async def send_quiz_question(update):
             seen.add(name)
             unique.append(c)
     options = unique
+    while len(options) < 4:
+        pool = [c for c in ALL_CODES if c not in options]
+        if not pool:
+            break
+        extra = random.choice(pool)
+        name = regions[extra]["name"].replace(" (доп.)", "")
+        if name not in seen:
+            seen.add(name)
+            options.append(extra)
     random.shuffle(options)
 
     builder = InlineKeyboardBuilder()
@@ -943,6 +955,15 @@ async def send_match_question(update):
             seen.add(name)
             unique.append(c)
     options = unique
+    while len(options) < 4:
+        pool = [c for c in ALL_CODES if c not in options]
+        if not pool:
+            break
+        extra = random.choice(pool)
+        name = regions[extra]["name"].replace(" (доп.)", "")
+        if name not in seen:
+            seen.add(name)
+            options.append(extra)
     random.shuffle(options)
 
     builder = InlineKeyboardBuilder()
