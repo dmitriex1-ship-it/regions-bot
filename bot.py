@@ -1272,6 +1272,9 @@ async def reset_exam_only(callback: types.CallbackQuery):
 @dp.callback_query(F.data.startswith("unblur_"))
 async def unblur_image(callback: types.CallbackQuery):
     code = callback.data.replace("unblur_", "")
+    users, user = get_user(str(callback.from_user.id))
+    user["hints_used"] += 1
+    save_users(users)
     img_path = get_image_path(code)
     if img_path:
         photo = FSInputFile(img_path)
