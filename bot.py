@@ -525,6 +525,23 @@ async def send_neighbors_question(update):
         wrong = random.sample(other, min(3, len(other)))
     
     options = wrong + [correct_code]
+    seen = set()
+    unique_options = []
+    for opt in options:
+        name = regions[opt]["name"].replace(" (доп.)", "")
+        if name not in seen:
+            seen.add(name)
+            unique_options.append(opt)
+    options = wrong + [correct_code]
+    # Убираем дубли по названию
+    seen = set()
+    unique_options = []
+    for opt in options:
+        name = regions[opt]["name"].replace(" (доп.)", "")
+        if name not in seen:
+            seen.add(name)
+            unique_options.append(opt)
+    options = unique_options
     random.shuffle(options)
 
     builder = InlineKeyboardBuilder()
@@ -822,6 +839,15 @@ async def send_quiz_question(update):
     other_codes = [c for c in ALL_CODES if c != code]
     wrong_codes = random.sample(other_codes, min(3, len(other_codes)))
     options = wrong_codes + [code]
+    # Убираем дубли по названию
+    seen = set()
+    unique = []
+    for c in options:
+        name = regions[c]["name"].replace(" (доп.)", "")
+        if name not in seen:
+            seen.add(name)
+            unique.append(c)
+    options = unique
     random.shuffle(options)
 
     builder = InlineKeyboardBuilder()
@@ -909,6 +935,14 @@ async def send_match_question(update):
     other_codes = [c for c in ALL_CODES if c != code]
     wrong_codes = random.sample(other_codes, min(3, len(other_codes)))
     options = wrong_codes + [code]
+    seen = set()
+    unique = []
+    for c in options:
+        name = regions[c]["name"].replace(" (доп.)", "")
+        if name not in seen:
+            seen.add(name)
+            unique.append(c)
+    options = unique
     random.shuffle(options)
 
     builder = InlineKeyboardBuilder()
