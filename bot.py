@@ -824,7 +824,7 @@ async def send_quiz_question(update):
     options = wrong_codes + [code]
     random.shuffle(options)
 
-   builder = InlineKeyboardBuilder()
+    builder = InlineKeyboardBuilder()
     for opt in options:
         builder.button(text=f"{regions[opt]['name']}", callback_data=f"quiz_answer_{code}_{opt}")
     builder.adjust(1)
@@ -1002,7 +1002,7 @@ async def send_truefalse_question(update):
         shown_name = regions[wrong_code]["name"]
         correct_answer = False
 
-   builder = InlineKeyboardBuilder()
+    builder = InlineKeyboardBuilder()
     builder.button(text="✅ Да", callback_data=f"tf_{code}_{correct_answer}_true")
     builder.button(text="❌ Нет", callback_data=f"tf_{code}_{correct_answer}_false")
     builder.adjust(2)
