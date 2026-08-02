@@ -64,6 +64,7 @@ def get_user(user_id: str):
             "total": 0, "correct": 0, "wrong": 0, "hints_used": 0,
             "quiz_total": 0, "quiz_correct": 0,
             "match_total": 0, "match_correct": 0,
+            "neighbors_total": 0, "neighbors_correct": 0,
             "tf_total": 0, "tf_correct": 0,
             "exam_total": 0, "exam_correct": 0,
             "quiz_state": None, "match_state": None, "exam_state": None,
@@ -89,6 +90,9 @@ def update_stats(user_id: str, correct: bool, mode: str = "quiz", code: str = No
     elif mode == "match":
         user["match_total"] += 1
         if correct: user["match_correct"] += 1
+    elif mode == "neighbors":
+        user["neighbors_total"] += 1
+        if correct: user["neighbors_correct"] += 1
     elif mode == "tf":
         user["tf_total"] += 1
         if correct: user["tf_correct"] += 1
@@ -150,6 +154,22 @@ def mode_percent(user: dict, mode: str) -> float:
     if total == 0:
         return 0.0
     return (user.get(f"{mode}_correct", 0) / total) * 100
+
+def build_wrong_options(correct_code: str, exclude_names: set | None = None, count: int = 3) -> list:
+    correct_name = regions[correct_code]["name"].replace(" (доп.)", "")
+    exclude = {correct_name} | (exclude_names or set())
+
+    def dedup_by_name(codes):
+        seen, out = set(), []
+        for c in codes:
+            name = regions[c]["name"].replace(" (доп.)", "")
+            if name not in exclude and name not in seen:
+                seen.add(name)
+                out.append(c)
+        return out
+
+    pool = dedup_by_name([c for c in ALL_CODES if c != correct_code])
+    return random.sample(pool, min(count, len(pool)))
 
 # -------------------- КЛАВИАТУРЫ --------------------
 def main_menu_kb():
@@ -273,6 +293,7 @@ async def cb_stats(callback: types.CallbackQuery):
     text += "<b>По режимам:</b>\n"
     text += f"🎯 Ассоциации: {user['quiz_correct']}/{user['quiz_total']} ({mode_percent(user, 'quiz'):.0f}%)\n"
     text += f"🧩 Найди пару: {user['match_correct']}/{user['match_total']} ({mode_percent(user, 'match'):.0f}%)\n"
+    text += f"🤝 Соседи: {user.get('neighbors_correct',0)}/{user.get('neighbors_total',0)} ({mode_percent(user, 'neighbors'):.0f}%)\n"
     text += f"⚡ Верно/Неверно: {user['tf_correct']}/{user['tf_total']} ({mode_percent(user, 'tf'):.0f}%)\n"
     text += f"📝 Экзамен: {user['exam_correct']}/{user['exam_total']} ({mode_percent(user, 'exam'):.0f}%)\n"
 
@@ -513,49 +534,21 @@ async def send_neighbors_question(update):
     right_short = right_name.replace(" (доп.)", "")
     correct_short = correct_name.replace(" (доп.)", "")
 
-    # Ищем регионы на ту же букву
-    first_letter = correct_short[0].upper()
-    same_letter = [c for c in ALL_CODES if c != correct_code 
-                   and regions[c]["name"].replace(" (доп.)", "")[0].upper() == first_letter]
-    
-    other = [c for c in ALL_CODES if c != correct_code]
-    if len(same_letter) >= 3:
-        wrong = random.sample(same_letter, 3)
-    else:
-        wrong = random.sample(other, min(3, len(other)))
-    
-   options = wrong + [correct_code]
-    # Чистим названия
     left_clean = regions[left_code]["name"].replace(" (доп.)", "")
     right_clean = regions[right_code]["name"].replace(" (доп.)", "")
-    correct_clean = regions[correct_code]["name"].replace(" (доп.)", "")
-    # Убираем левый и правый по названиям
-    options = [c for c in options if regions[c]["name"].replace(" (доп.)", "") not in (left_clean, right_clean)]
-    # Убираем дубли по названиям
-    seen = {left_clean, right_clean}
-    unique = []
-    for c in options:
-        name = regions[c]["name"].replace(" (доп.)", "")
-        if name not in seen:
-            seen.add(name)
-            unique.append(c)
-    options = unique
-    # Гарантируем, что правильный ответ есть
-    if correct_code not in options:
-        options.append(correct_code)
-        seen.add(correct_clean)
-    # Добираем до 4, исключая левый и правый по названиям
-    while len(options) < 4:
-        pool = [c for c in ALL_CODES 
-                if c not in options 
-                and regions[c]["name"].replace(" (доп.)", "") not in (left_clean, right_clean)]
-        if not pool:
-            break
-        extra = random.choice(pool)
-        name = regions[extra]["name"].replace(" (доп.)", "")
-        if name not in seen:
-            seen.add(name)
-            options.append(extra)
+
+    first_letter = correct_short[0].upper()
+    same_letter_names = {left_clean, right_clean}  # на всякий случай, если совпадёт буква
+    same_letter_pool = [c for c in ALL_CODES
+                         if regions[c]["name"][0].upper() == first_letter]
+    wrong = build_wrong_options(correct_code, exclude_names={left_clean, right_clean})
+    same_letter_wrong = build_wrong_options(correct_code, exclude_names={left_clean, right_clean})
+    # если после дедупликации по буквенному пулу хватает 3 — используем их, иначе общий пул
+    letter_candidates = [c for c in same_letter_pool if c != correct_code]
+    if len(set(regions[c]["name"].replace(" (доп.)", "") for c in letter_candidates)) >= 3:
+        wrong = build_wrong_options(correct_code, exclude_names={left_clean, right_clean})
+
+    options = wrong + [correct_code]
     random.shuffle(options)
     
     builder = InlineKeyboardBuilder()
@@ -590,7 +583,7 @@ async def handle_neighbors(callback: types.CallbackQuery):
     chosen_code = parts[2]
     is_correct = (correct_code == chosen_code)
 
-    update_stats(str(callback.from_user.id), correct=is_correct, mode="match", code=correct_code)
+    update_stats(str(callback.from_user.id), correct=is_correct, mode="neighbors", code=correct_code)
 
     if is_correct:
         await callback.answer(f"✅ Правильно! {correct_code} — {regions[correct_code]['name']}.", show_alert=True)
@@ -724,7 +717,7 @@ async def send_district_test_question(update):
     region = regions[code]
 
     other = [c for c in ALL_CODES if c != code]
-    wrong = random.sample(other, min(3, len(other)))
+    wrong = build_wrong_options(code)
     options = wrong + [code]
     random.shuffle(options)
 
@@ -850,26 +843,8 @@ async def send_quiz_question(update):
     code = random.choice(ALL_CODES)
     region = regions[code]
 
-    other_codes = [c for c in ALL_CODES if c != code]
-    wrong_codes = random.sample(other_codes, min(3, len(other_codes)))
+    wrong_codes = build_wrong_options(code)
     options = wrong_codes + [code]
-    seen = set()
-    unique = []
-    for c in options:
-        name = regions[c]["name"].replace(" (доп.)", "")
-        if name not in seen:
-            seen.add(name)
-            unique.append(c)
-    options = unique
-    while len(options) < 4:
-        pool = [c for c in ALL_CODES if c not in options]
-        if not pool:
-            break
-        extra = random.choice(pool)
-        name = regions[extra]["name"].replace(" (доп.)", "")
-        if name not in seen:
-            seen.add(name)
-            options.append(extra)
     random.shuffle(options)
 
     builder = InlineKeyboardBuilder()
@@ -954,26 +929,9 @@ async def send_match_question(update):
         is_cb = False
 
     code = random.choice(ALL_CODES)
-    other_codes = [c for c in ALL_CODES if c != code]
-    wrong_codes = random.sample(other_codes, min(3, len(other_codes)))
+
+    wrong_codes = build_wrong_options(code)
     options = wrong_codes + [code]
-    seen = set()
-    unique = []
-    for c in options:
-        name = regions[c]["name"].replace(" (доп.)", "")
-        if name not in seen:
-            seen.add(name)
-            unique.append(c)
-    options = unique
-    while len(options) < 4:
-        pool = [c for c in ALL_CODES if c not in options]
-        if not pool:
-            break
-        extra = random.choice(pool)
-        name = regions[extra]["name"].replace(" (доп.)", "")
-        if name not in seen:
-            seen.add(name)
-            options.append(extra)
     random.shuffle(options)
 
     builder = InlineKeyboardBuilder()
@@ -1360,13 +1318,14 @@ async def main():
     print(f"Бот запущен. Картинки: {IMAGES_DIR.absolute()}")
     print(f"Размытые превью: {BLUR_DIR.absolute()}")
 
+    port = int(os.environ.get("PORT", 10000))
     app = web.Application()
     app.router.add_get("/", health_check)
     runner = web.AppRunner(app)
     await runner.setup()
-    site = web.TCPSite(runner, "0.0.0.0", 10000)
+    site = web.TCPSite(runner, "0.0.0.0", port)
     await site.start()
-    print("HTTP-сервер на порту 10000")
+    print(f"HTTP-сервер на порту {port}")
 
     await dp.start_polling(bot)
 
