@@ -524,14 +524,15 @@ async def send_neighbors_question(update):
     else:
         wrong = random.sample(other, min(3, len(other)))
     
-    options = wrong + [correct_code]
-    # Убираем левый и правый регионы из вариантов
-    options = [c for c in options if c not in (left_code, right_code)]
-    # Гарантируем, что правильный ответ в вариантах
-    if correct_code not in options:
-        options.append(correct_code)
-    # Убираем дубли по названию
-    seen = set()
+   options = wrong + [correct_code]
+    # Чистим названия
+    left_clean = regions[left_code]["name"].replace(" (доп.)", "")
+    right_clean = regions[right_code]["name"].replace(" (доп.)", "")
+    correct_clean = regions[correct_code]["name"].replace(" (доп.)", "")
+    # Убираем левый и правый по названиям
+    options = [c for c in options if regions[c]["name"].replace(" (доп.)", "") not in (left_clean, right_clean)]
+    # Убираем дубли по названиям
+    seen = {left_clean, right_clean}
     unique = []
     for c in options:
         name = regions[c]["name"].replace(" (доп.)", "")
@@ -539,9 +540,15 @@ async def send_neighbors_question(update):
             seen.add(name)
             unique.append(c)
     options = unique
-    # Если меньше 4 — добираем случайными, исключая левый и правый
+    # Гарантируем, что правильный ответ есть
+    if correct_code not in options:
+        options.append(correct_code)
+        seen.add(correct_clean)
+    # Добираем до 4, исключая левый и правый по названиям
     while len(options) < 4:
-        pool = [c for c in ALL_CODES if c not in options and c not in (left_code, right_code)]
+        pool = [c for c in ALL_CODES 
+                if c not in options 
+                and regions[c]["name"].replace(" (доп.)", "") not in (left_clean, right_clean)]
         if not pool:
             break
         extra = random.choice(pool)
