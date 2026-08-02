@@ -527,6 +527,9 @@ async def send_neighbors_question(update):
     options = wrong + [correct_code]
     # Убираем левый и правый регионы из вариантов
     options = [c for c in options if c not in (left_code, right_code)]
+    # Гарантируем, что правильный ответ в вариантах
+    if correct_code not in options:
+        options.append(correct_code)
     # Убираем дубли по названию
     seen = set()
     unique = []
