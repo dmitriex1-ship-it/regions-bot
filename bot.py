@@ -164,7 +164,8 @@ def mode_percent(user: dict, mode: str) -> float:
         return 0.0
     return (user.get(f"{mode}_correct", 0) / total) * 100
 
-def build_wrong_options(correct_code: str, exclude_names: set | None = None, count: int = 3) -> list:
+def build_wrong_options(correct_code: str, exclude_names: set | None = None, count: int = 3,
+                         prefer_same_first_letter: bool = False) -> list:
     correct_name = regions[correct_code]["name"].replace(" (доп.)", "")
     exclude = {correct_name} | (exclude_names or set())
 
@@ -178,6 +179,13 @@ def build_wrong_options(correct_code: str, exclude_names: set | None = None, cou
         return out
 
     pool = dedup_by_name([c for c in ALL_CODES if c != correct_code])
+
+    if prefer_same_first_letter:
+        letter = correct_name[0].upper()
+        letter_pool = [c for c in pool if regions[c]["name"][0].upper() == letter]
+        if len(letter_pool) >= count:
+            return random.sample(letter_pool, count)
+
     return random.sample(pool, min(count, len(pool)))
 
 def recent_accuracy_percent(user: dict, window: int = 30) -> float:
@@ -579,17 +587,7 @@ async def send_neighbors_question(update):
     left_clean = regions[left_code]["name"].replace(" (доп.)", "")
     right_clean = regions[right_code]["name"].replace(" (доп.)", "")
 
-    first_letter = correct_short[0].upper()
-    same_letter_names = {left_clean, right_clean}  # на всякий случай, если совпадёт буква
-    same_letter_pool = [c for c in ALL_CODES
-                         if regions[c]["name"][0].upper() == first_letter]
-    wrong = build_wrong_options(correct_code, exclude_names={left_clean, right_clean})
-    same_letter_wrong = build_wrong_options(correct_code, exclude_names={left_clean, right_clean})
-    # если после дедупликации по буквенному пулу хватает 3 — используем их, иначе общий пул
-    letter_candidates = [c for c in same_letter_pool if c != correct_code]
-    if len(set(regions[c]["name"].replace(" (доп.)", "") for c in letter_candidates)) >= 3:
-        wrong = build_wrong_options(correct_code, exclude_names={left_clean, right_clean})
-
+    wrong = build_wrong_options(correct_code, exclude_names={left_clean, right_clean}, prefer_same_first_letter=True)
     options = wrong + [correct_code]
     random.shuffle(options)
     
