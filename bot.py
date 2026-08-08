@@ -234,8 +234,7 @@ def main_menu_kb():
 
 def study_menu_kb():
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📖 Регионы с ассоциациями", callback_data="mode_cards_all")],
-        [InlineKeyboardButton(text="📜 Регионы по порядку", callback_data="mode_ordered")],
+        [InlineKeyboardButton(text="📖 Карточки регионов", callback_data="mode_study_cards")],
         [InlineKeyboardButton(text="🗺 По округам", callback_data="mode_district")],
         [InlineKeyboardButton(text="🏠 В главное меню", callback_data="to_menu")],
     ])
@@ -341,7 +340,9 @@ async def cb_stats(callback: types.CallbackQuery):
     wrong = user["wrong"]
     hints = user["hints_used"]
     pct = progress_percent(user)
-    exam_unlocked = pct >= 70
+    recent = user.get("recent_answers", [])
+    recent_pct = recent_accuracy_percent(user)
+    exam_unlocked = len(recent) >= 20 and recent_pct >= 70
 
     text = (
         f"📊 <b>Общая статистика</b>\n\n"
@@ -349,12 +350,16 @@ async def cb_stats(callback: types.CallbackQuery):
         f"✅ Правильных: <b>{correct}</b>\n"
         f"❌ Ошибок: <b>{wrong}</b>\n"
         f"💡 Подсказок: <b>{hints}</b>\n"
-        f"🎯 Точность: <b>{pct:.1f}%</b>\n\n"
+        f"🎯 Точность за всё время: <b>{pct:.1f}%</b>\n"
+        f"📈 Точность за последние {len(recent)}: <b>{recent_pct:.1f}%</b>\n\n"
     )
     if exam_unlocked:
-        text += "🔓 <b>Экзамен открыт!</b> (70%+)\n\n"
+        text += "🔓 <b>Экзамен открыт!</b>\n\n"
     else:
-        text += f"🔒 <b>Экзамен закрыт</b> (нужно 70%, сейчас {pct:.1f}%)\n\n"
+        text += f"🔒 <b>Экзамен закрыт</b> (нужно 20+ ответов и 70% точности за последние 30, сейчас {recent_pct:.1f}%)\n\n"
+
+    learned, total_regions = learned_regions_count(user)
+    text += f"🗺 <b>Выучено регионов:</b> {learned} / {total_regions}\n\n"
 
     text += "<b>По режимам:</b>\n"
     text += f"🎯 Ассоциации: {user['quiz_correct']}/{user['quiz_total']} ({mode_percent(user, 'quiz'):.0f}%)\n"
@@ -422,15 +427,15 @@ async def reset_stats_yes(callback: types.CallbackQuery):
     save_users(users)
     await callback.message.edit_text("✅ Статистика сброшена! Рейтинг сохранён.", reply_markup=back_kb())
 
-# ========== РЕЖИМ: КАРТОЧКИ (ВСЕ) ==========
-@dp.callback_query(F.data == "mode_cards_all")
-async def start_cards_all(callback: types.CallbackQuery):
+# ========== РЕЖИМ: КАРТОЧКИ РЕГИОНОВ (кратко/подробно) ==========
+@dp.callback_query(F.data == "mode_study_cards")
+async def start_study_cards(callback: types.CallbackQuery):
     users, user = get_user(str(callback.from_user.id))
-    user["ordered_state"] = {"index": 0, "codes": ORDERED_CODES.copy()}
+    user["ordered_state"] = {"index": 0, "codes": ORDERED_CODES.copy(), "view": "detailed"}
     save_users(users)
-    await show_card(callback)
+    await show_study_card(callback)
 
-async def show_card(update):
+async def show_study_card(update):
     if isinstance(update, types.CallbackQuery):
         user_id = str(update.from_user.id)
         msg = update.message
@@ -456,29 +461,39 @@ async def show_card(update):
     code = state["codes"][state["index"]]
     region = regions[code]
     progress_text = f"{state['index'] + 1} / {len(state['codes'])}"
+    view = state.get("view", "detailed")
 
-    text = (
-        f"📖 <b>Карточка {progress_text}</b>\n\n"
-        f"Код: <b>{code}</b>\n"
-        f"Регион: <b>{region['name']}</b>\n"
-        f"Округ: {region.get('district', '—')}\n\n"
-        f"💡 <i>{region['hint']}</i>\n"
-        f"💡 <i>{region['hint2']}</i>\n\n"
-        f"📌 {region['facts']}"
-    )
+    if view == "detailed":
+        text = (
+            f"📖 <b>Карточка {progress_text}</b>\n\n"
+            f"Код: <b>{code}</b>\n"
+            f"Регион: <b>{region['name']}</b>\n"
+            f"Округ: {region.get('district', '—')}\n\n"
+            f"💡 <i>{region['hint']}</i>\n"
+            f"💡 <i>{region['hint2']}</i>\n\n"
+            f"📌 {region['facts']}"
+        )
+    else:
+        text = (
+            f"📜 <b>{progress_text}</b>\n\n"
+            f"<b>{code}</b> — {region['name']}\n"
+            f"Округ: {region.get('district', '—')}"
+        )
 
     builder = InlineKeyboardBuilder()
     nav_buttons = []
     if state["index"] > 0:
-        nav_buttons.append(InlineKeyboardButton(text="⬅️ Назад", callback_data="prev_card"))
-    nav_buttons.append(InlineKeyboardButton(text="▶️ Дальше", callback_data="next_card"))
+        nav_buttons.append(InlineKeyboardButton(text="⬅️ Назад", callback_data="prev_study_card"))
+    nav_buttons.append(InlineKeyboardButton(text="▶️ Дальше", callback_data="next_study_card"))
     builder.row(*nav_buttons)
+    toggle_text = "🔎 Кратко" if view == "detailed" else "📖 Подробно"
+    builder.row(InlineKeyboardButton(text=toggle_text, callback_data="toggle_study_view"))
     builder.row(
         InlineKeyboardButton(text="📚 К изучению", callback_data="go_study_menu"),
         InlineKeyboardButton(text="🏠 В главное меню", callback_data="to_menu"),
     )
 
-    img_path = get_image_path(code)
+    img_path = get_image_path(code) if view == "detailed" else None
     if img_path and is_cb:
         photo = FSInputFile(img_path)
         await msg.edit_media(InputMediaPhoto(media=photo, caption=text, parse_mode="HTML"), reply_markup=builder.as_markup())
@@ -486,95 +501,43 @@ async def show_card(update):
         photo = FSInputFile(img_path)
         await msg.answer_photo(photo, caption=text, parse_mode="HTML", reply_markup=builder.as_markup())
     elif is_cb:
-        await msg.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
+        try:
+            await msg.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
+        except Exception:
+            await msg.delete()
+            await bot.send_message(chat_id=user_id, text=text, parse_mode="HTML", reply_markup=builder.as_markup())
     else:
         await msg.answer(text, parse_mode="HTML", reply_markup=builder.as_markup())
 
     if isinstance(update, types.CallbackQuery):
         await update.answer()
 
-@dp.callback_query(F.data == "next_card")
-async def next_card(callback: types.CallbackQuery):
+@dp.callback_query(F.data == "next_study_card")
+async def next_study_card(callback: types.CallbackQuery):
     users, user = get_user(str(callback.from_user.id))
     state = user.get("ordered_state")
     if state:
         state["index"] += 1
         save_users(users)
-    await show_card(callback)
+    await show_study_card(callback)
 
-# ========== РЕЖИМ: ПО ПОРЯДКУ ==========
-@dp.callback_query(F.data == "mode_ordered")
-async def start_ordered(callback: types.CallbackQuery):
+@dp.callback_query(F.data == "prev_study_card")
+async def prev_study_card(callback: types.CallbackQuery):
     users, user = get_user(str(callback.from_user.id))
-    user["ordered_state"] = {"index": 0, "codes": ORDERED_CODES.copy()}
-    save_users(users)
-    await show_ordered(callback)
-
-async def show_ordered(update):
-    if isinstance(update, types.CallbackQuery):
-        user_id = str(update.from_user.id)
-        msg = update.message
-        is_cb = True
-    else:
-        user_id = str(update.chat.id)
-        msg = update
-        is_cb = False
-
-    _, user = get_user(user_id)
     state = user.get("ordered_state")
-    if not state or state["index"] >= len(state["codes"]):
-        text = "✅ Все коды пройдены по порядку!"
-        builder = InlineKeyboardBuilder()
-        builder.button(text="📚 К изучению", callback_data="go_study_menu")
-        builder.button(text="🏠 В главное меню", callback_data="to_menu")
-        if is_cb:
-            await msg.edit_text(text, reply_markup=builder.as_markup())
-        else:
-            await msg.answer(text, reply_markup=builder.as_markup())
-        return
+    if state and state["index"] > 0:
+        state["index"] -= 1
+        save_users(users)
+    await show_study_card(callback)
 
-    code = state["codes"][state["index"]]
-    region = regions[code]
-    progress_text = f"{state['index'] + 1} / {len(state['codes'])}"
-
-    text = (
-        f"📜 <b>По порядку {progress_text}</b>\n\n"
-        f"<b>{code}</b> — {region['name']}\n"
-        f"Округ: {region.get('district', '—')}"
-    )
-
-    builder = InlineKeyboardBuilder()
-    nav_buttons = []
-    if state["index"] > 0:
-        nav_buttons.append(InlineKeyboardButton(text="⬅️ Назад", callback_data="prev_ordered"))
-    nav_buttons.append(InlineKeyboardButton(text="▶️ Дальше", callback_data="next_ordered"))
-    builder.row(*nav_buttons)
-    builder.row(InlineKeyboardButton(text="📚 К изучению", callback_data="go_study_menu"),
-        InlineKeyboardButton(text="🏠 В главное меню", callback_data="to_menu"),)
-
-    img_path = get_image_path(code)
-    if img_path and is_cb:
-        photo = FSInputFile(img_path)
-        await msg.edit_media(InputMediaPhoto(media=photo, caption=text, parse_mode="HTML"), reply_markup=builder.as_markup())
-    elif img_path:
-        photo = FSInputFile(img_path)
-        await msg.answer_photo(photo, caption=text, parse_mode="HTML", reply_markup=builder.as_markup())
-    elif is_cb:
-        await msg.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
-    else:
-        await msg.answer(text, parse_mode="HTML", reply_markup=builder.as_markup())
-
-    if isinstance(update, types.CallbackQuery):
-        await update.answer()
-
-@dp.callback_query(F.data == "next_ordered")
-async def next_ordered(callback: types.CallbackQuery):
+@dp.callback_query(F.data == "toggle_study_view")
+async def toggle_study_view(callback: types.CallbackQuery):
     users, user = get_user(str(callback.from_user.id))
     state = user.get("ordered_state")
     if state:
-        state["index"] += 1
+        state["view"] = "brief" if state.get("view", "detailed") == "detailed" else "detailed"
         save_users(users)
-    await show_ordered(callback)
+    await show_study_card(callback)
 
 # ========== ИГРА «СОСЕДИ» ==========
 @dp.callback_query(F.data == "mode_neighbors")
@@ -1170,9 +1133,16 @@ async def handle_tf_answer(callback: types.CallbackQuery):
 @dp.callback_query(F.data == "mode_exam")
 async def start_exam(callback: types.CallbackQuery):
     _, user = get_user(str(callback.from_user.id))
-    pct = progress_percent(user)
+    recent = user.get("recent_answers", [])
+    if len(recent) < 20:
+        await callback.answer(
+            f"🔒 Экзамен закрыт. Нужно ответить хотя бы на 20 вопросов (сейчас {len(recent)}) с точностью 70%+.",
+            show_alert=True,
+        )
+        return
+    pct = recent_accuracy_percent(user)
     if pct < 70:
-        await callback.answer(f"🔒 Экзамен закрыт! Нужно 70%. У тебя: {pct:.1f}%", show_alert=True)
+        await callback.answer(f"🔒 Экзамен закрыт! Нужно 70% точности за последние 30 ответов. Сейчас: {pct:.1f}%", show_alert=True)
         return
     await send_exam_question(callback)
 
