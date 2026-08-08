@@ -99,6 +99,9 @@ def update_stats(user_id: str, correct: bool, mode: str = "quiz", code: str = No
     elif mode == "neighbors":
         user["neighbors_total"] += 1
         if correct: user["neighbors_correct"] += 1
+    elif mode == "neighbors":
+        user["neighbors_total"] += 1
+        if correct: user["neighbors_correct"] += 1
     elif mode == "tf":
         user["tf_total"] += 1
         if correct: user["tf_correct"] += 1
@@ -287,6 +290,7 @@ async def cmd_reset(message: types.Message):
         "total": 0, "correct": 0, "wrong": 0, "hints_used": 0,
         "quiz_total": 0, "quiz_correct": 0,
         "match_total": 0, "match_correct": 0,
+        "neighbors_total": 0, "neighbors_correct": 0,
         "tf_total": 0, "tf_correct": 0,
         "exam_total": 0, "exam_correct": 0,
         "quiz_state": None, "match_state": None, "exam_state": None,
@@ -415,6 +419,7 @@ async def reset_stats_yes(callback: types.CallbackQuery):
         "total": 0, "correct": 0, "wrong": 0, "hints_used": 0,
         "quiz_total": 0, "quiz_correct": 0,
         "match_total": 0, "match_correct": 0,
+        "neighbors_total": 0, "neighbors_correct": 0,
         "tf_total": 0, "tf_correct": 0,
         "exam_total": exam_total,
         "exam_correct": exam_correct,
@@ -618,7 +623,7 @@ async def handle_neighbors(callback: types.CallbackQuery):
     chosen_code = parts[2]
     is_correct = (correct_code == chosen_code)
 
-    update_stats(str(callback.from_user.id), correct=is_correct, mode="match", code=correct_code)
+    update_stats(str(callback.from_user.id), correct=is_correct, mode="neighbors", code=correct_code)
 
     users, user = get_user(str(callback.from_user.id))
     result = record_session_answer(user, is_correct, correct_code, regions[correct_code]["name"])
@@ -638,7 +643,7 @@ async def handle_neighbors(callback: types.CallbackQuery):
         )
         builder = InlineKeyboardBuilder()
         builder.button(text="▶️ Дальше", callback_data="neighbors_continue")
-        builder.button(text="📚 К изучению", callback_data="go_study_menu")
+        builder.button(text="🎮 К играм", callback_data="go_game_menu")
         builder.adjust(1)
 
         img_path = get_image_path(correct_code)
