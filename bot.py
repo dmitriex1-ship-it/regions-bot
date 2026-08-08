@@ -542,6 +542,13 @@ async def toggle_study_view(callback: types.CallbackQuery):
 # ========== ИГРА «СОСЕДИ» ==========
 @dp.callback_query(F.data == "mode_neighbors")
 async def start_neighbors(callback: types.CallbackQuery):
+    users, user = get_user(str(callback.from_user.id))
+    start_session(user, "neighbors")
+    save_users(users)
+    await send_neighbors_question(callback)
+
+@dp.callback_query(F.data == "neighbors_continue")
+async def neighbors_continue(callback: types.CallbackQuery):
     await send_neighbors_question(callback)
 
 async def send_neighbors_question(update):
@@ -604,7 +611,6 @@ async def send_neighbors_question(update):
         await update.answer()
     else:
         await bot.send_message(chat_id=user_id, text=text, parse_mode="HTML", reply_markup=builder.as_markup())
-
 @dp.callback_query(F.data.startswith("neighbors_"))
 async def handle_neighbors(callback: types.CallbackQuery):
     parts = callback.data.split("_")
@@ -612,11 +618,18 @@ async def handle_neighbors(callback: types.CallbackQuery):
     chosen_code = parts[2]
     is_correct = (correct_code == chosen_code)
 
-    update_stats(str(callback.from_user.id), correct=is_correct, mode="neighbors", code=correct_code)
+    update_stats(str(callback.from_user.id), correct=is_correct, mode="match", code=correct_code)
+
+    users, user = get_user(str(callback.from_user.id))
+    result = record_session_answer(user, is_correct, correct_code, regions[correct_code]["name"])
+    save_users(users)
 
     if is_correct:
         await callback.answer(f"✅ Правильно! {correct_code} — {regions[correct_code]['name']}.", show_alert=True)
-        await send_neighbors_question(callback)
+        if result:
+            await show_session_result(callback.from_user.id, result, "mode_neighbors")
+        else:
+            await send_neighbors_question(callback)
     else:
         new_text = (
             f"❌ Неправильно.\n\n"
@@ -624,7 +637,7 @@ async def handle_neighbors(callback: types.CallbackQuery):
             f"<i>{regions[correct_code]['facts']}</i>"
         )
         builder = InlineKeyboardBuilder()
-        builder.button(text="▶️ Дальше", callback_data="mode_neighbors")
+        builder.button(text="▶️ Дальше", callback_data="neighbors_continue")
         builder.button(text="📚 К изучению", callback_data="go_study_menu")
         builder.adjust(1)
 
@@ -635,6 +648,9 @@ async def handle_neighbors(callback: types.CallbackQuery):
         else:
             await callback.message.reply(new_text, parse_mode="HTML", reply_markup=builder.as_markup())
         await callback.answer()
+
+        if result:
+            await show_session_result(callback.from_user.id, result, "mode_neighbors")
 
 # ========== РЕЖИМ: ПО ОКРУГАМ ==========
 @dp.callback_query(F.data == "mode_district")
@@ -859,6 +875,13 @@ async def handle_distest(callback: types.CallbackQuery):
 # ========== РЕЖИМ 1: УГАДАЙ ПО АССОЦИАЦИИ ==========
 @dp.callback_query(F.data == "mode_quiz")
 async def start_quiz(callback: types.CallbackQuery):
+    users, user = get_user(str(callback.from_user.id))
+    start_session(user, "quiz")
+    save_users(users)
+    await send_quiz_question(callback)
+
+@dp.callback_query(F.data == "quiz_continue")
+async def quiz_continue(callback: types.CallbackQuery):
     await send_quiz_question(callback)
 
 async def send_quiz_question(update):
@@ -922,9 +945,16 @@ async def handle_quiz_answer(callback: types.CallbackQuery):
 
     update_stats(str(callback.from_user.id), correct=is_correct, mode="quiz", code=correct_code)
 
+    users, user = get_user(str(callback.from_user.id))
+    result = record_session_answer(user, is_correct, correct_code, regions[correct_code]["name"])
+    save_users(users)
+
     if is_correct:
         await callback.answer(f"✅ Правильно! {correct_code} — {regions[correct_code]['name']}.", show_alert=True)
-        await send_quiz_question(callback)
+        if result:
+            await show_session_result(callback.from_user.id, result, "mode_quiz")
+        else:
+            await send_quiz_question(callback)
     else:
         new_text = (
             f"❌ Неправильно.\n\n"
@@ -932,7 +962,7 @@ async def handle_quiz_answer(callback: types.CallbackQuery):
             f"<i>{regions[correct_code]['facts']}</i>"
         )
         builder = InlineKeyboardBuilder()
-        builder.button(text="▶️ Продолжить", callback_data="mode_quiz")
+        builder.button(text="▶️ Продолжить", callback_data="quiz_continue")
         builder.button(text="🏠 В главное меню", callback_data="to_menu")
         builder.adjust(1)
 
@@ -944,9 +974,19 @@ async def handle_quiz_answer(callback: types.CallbackQuery):
             await callback.message.reply(new_text, parse_mode="HTML", reply_markup=builder.as_markup())
         await callback.answer()
 
+        if result:
+            await show_session_result(callback.from_user.id, result, "mode_quiz")
+
 # ========== РЕЖИМ 2: НАЙДИ ПАРУ ==========
 @dp.callback_query(F.data == "mode_match")
 async def start_match(callback: types.CallbackQuery):
+    users, user = get_user(str(callback.from_user.id))
+    start_session(user, "match")
+    save_users(users)
+    await send_match_question(callback)
+
+@dp.callback_query(F.data == "match_continue")
+async def match_continue(callback: types.CallbackQuery):
     await send_match_question(callback)
 
 async def send_match_question(update):
@@ -1007,9 +1047,16 @@ async def handle_match_answer(callback: types.CallbackQuery):
 
     update_stats(str(callback.from_user.id), correct=is_correct, mode="match", code=correct_code)
 
+    users, user = get_user(str(callback.from_user.id))
+    result = record_session_answer(user, is_correct, correct_code, regions[correct_code]["name"])
+    save_users(users)
+
     if is_correct:
         await callback.answer(f"✅ Правильно! {correct_code} — {regions[correct_code]['name']}.", show_alert=True)
-        await send_match_question(callback)
+        if result:
+            await show_session_result(callback.from_user.id, result, "mode_match")
+        else:
+            await send_match_question(callback)
     else:
         new_text = (
             f"❌ Неправильно.\n\n"
@@ -1017,7 +1064,7 @@ async def handle_match_answer(callback: types.CallbackQuery):
             f"<i>{regions[correct_code]['facts']}</i>"
         )
         builder = InlineKeyboardBuilder()
-        builder.button(text="▶️ Продолжить", callback_data="mode_match")
+        builder.button(text="▶️ Продолжить", callback_data="match_continue")
         builder.button(text="🏠 В главное меню", callback_data="to_menu")
         builder.adjust(1)
 
@@ -1029,9 +1076,15 @@ async def handle_match_answer(callback: types.CallbackQuery):
             await callback.message.reply(new_text, parse_mode="HTML", reply_markup=builder.as_markup())
         await callback.answer()
 
+        if result:
+            await show_session_result(callback.from_user.id, result, "mode_match")
+
 # ========== РЕЖИМ 3: ВЕРНО / НЕВЕРНО ==========
 @dp.callback_query(F.data == "mode_truefalse")
 async def start_truefalse(callback: types.CallbackQuery):
+    users, user = get_user(str(callback.from_user.id))
+    start_session(user, "tf")
+    save_users(users)
     await send_truefalse_question(callback)
 
 async def send_truefalse_question(update):
@@ -1107,9 +1160,16 @@ async def handle_tf_answer(callback: types.CallbackQuery):
 
     update_stats(str(callback.from_user.id), correct=is_correct, mode="tf", code=code)
 
+    users, user = get_user(str(callback.from_user.id))
+    result = record_session_answer(user, is_correct, code, regions[code]["name"])
+    save_users(users)
+
     if is_correct:
         await callback.answer(f"✅ Правильно! {code} — {regions[code]['name']}.", show_alert=True)
-        await send_truefalse_question(callback)
+        if result:
+            await show_session_result(callback.from_user.id, result, "mode_truefalse")
+        else:
+            await send_truefalse_question(callback)
     else:
         new_text = (
             f"❌ Неправильно.\n\n"
@@ -1128,6 +1188,9 @@ async def handle_tf_answer(callback: types.CallbackQuery):
         else:
             await callback.message.reply(new_text, parse_mode="HTML", reply_markup=builder.as_markup())
         await callback.answer()
+
+        if result:
+            await show_session_result(callback.from_user.id, result, "mode_truefalse")
 
 # ========== РЕЖИМ 4: ЭКЗАМЕН ==========
 @dp.callback_query(F.data == "mode_exam")
