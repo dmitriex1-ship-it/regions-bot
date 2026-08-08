@@ -262,7 +262,7 @@ def game_menu_kb():
 def district_menu_kb():
     builder = InlineKeyboardBuilder()
     for d in DISTRICTS:
-        builder.button(text=d, callback_data=f"district_{d}")
+        builder.button(text=f"{d} ({len(DISTRICTS[d])})", callback_data=f"district_{d}")
     builder.row(
         InlineKeyboardButton(text="📚 К изучению", callback_data="go_study_menu"),
         InlineKeyboardButton(text="🏠 В главное меню", callback_data="to_menu"),
