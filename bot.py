@@ -596,7 +596,7 @@ async def send_neighbors_question(update):
         name = regions[opt]["name"].replace(" (доп.)", "")
         builder.button(text=name, callback_data=f"neighbors_{correct_code}_{opt}")
     builder.adjust(1)
-    builder.row(InlineKeyboardButton(text="📚 К изучению", callback_data="go_study_menu"))
+    builder.row(InlineKeyboardButton(text="🎮 К играм", callback_data="go_game_menu"))
 
     text = (
         f"🧩 <b>Игра «Соседи»</b>\n\n"
