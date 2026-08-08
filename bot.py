@@ -45,6 +45,7 @@ with open(DATA_FILE, "r", encoding="utf-8") as f:
 
 ALL_CODES = list(regions.keys())
 ORDERED_CODES = sorted(ALL_CODES, key=lambda x: int(x))
+TOTAL_REGIONS = len({DOP_TO_MAIN.get(c, c) for c in ALL_CODES})
 
 # -------------------- ХРАНЕНИЕ ПОЛЬЗОВАТЕЛЕЙ --------------------
 def load_users():
@@ -70,6 +71,8 @@ def get_user(user_id: str):
             "quiz_state": None, "match_state": None, "exam_state": None,
             "district_state": None, "ordered_state": None, "neighbors_state": None,
             "region_stats": {},
+            "session": None,
+            "recent_answers": [],
         }
         save_users(users)
     return users, users[user_id]
@@ -83,6 +86,9 @@ def update_stats(user_id: str, correct: bool, mode: str = "quiz", code: str = No
         user["wrong"] += 1
     if hint_used:
         user["hints_used"] += 1
+
+    user.setdefault("recent_answers", []).append(1 if correct else 0)
+    user["recent_answers"] = user["recent_answers"][-30:]
 
     if mode == "quiz":
         user["quiz_total"] += 1
@@ -171,6 +177,51 @@ def build_wrong_options(correct_code: str, exclude_names: set | None = None, cou
     pool = dedup_by_name([c for c in ALL_CODES if c != correct_code])
     return random.sample(pool, min(count, len(pool)))
 
+def recent_accuracy_percent(user: dict, window: int = 30) -> float:
+    recent = user.get("recent_answers", [])[-window:]
+    if not recent:
+        return 0.0
+    return (sum(recent) / len(recent)) * 100
+
+def learned_regions_count(user: dict, threshold: float = 0.7, min_attempts: int = 2):
+    stats = user.get("region_stats", {})
+    learned = 0
+    for code, s in stats.items():
+        if s["total"] >= min_attempts and (s["correct"] / s["total"]) >= threshold:
+            learned += 1
+    return learned, TOTAL_REGIONS
+
+SESSION_LENGTH = 10
+
+def start_session(user: dict, mode: str):
+    user["session"] = {"mode": mode, "count": 0, "correct": 0, "wrong": []}
+
+def record_session_answer(user: dict, is_correct: bool, code: str, region_name: str):
+    session = user.get("session")
+    if not session:
+        return None
+    session["count"] += 1
+    if is_correct:
+        session["correct"] += 1
+    else:
+        session["wrong"].append(f"{code} — {region_name}")
+    if session["count"] >= SESSION_LENGTH:
+        result = session
+        user["session"] = None
+        return result
+    return None
+
+async def show_session_result(chat_id, result: dict, restart_callback: str):
+    pct = (result["correct"] / result["count"]) * 100 if result["count"] else 0
+    text = f"🏁 <b>Раунд завершён!</b>\n\n✅ Правильно: {result['correct']}/{result['count']} ({pct:.0f}%)\n"
+    if result["wrong"]:
+        text += "\n❌ Ошибся в:\n" + "\n".join(result["wrong"])
+    builder = InlineKeyboardBuilder()
+    builder.button(text="🔁 Ещё раунд", callback_data=restart_callback)
+    builder.button(text="🏠 В главное меню", callback_data="to_menu")
+    builder.adjust(1)
+    await bot.send_message(chat_id=chat_id, text=text, parse_mode="HTML", reply_markup=builder.as_markup())
+
 # -------------------- КЛАВИАТУРЫ --------------------
 def main_menu_kb():
     return InlineKeyboardMarkup(inline_keyboard=[
@@ -242,23 +293,38 @@ async def cmd_reset(message: types.Message):
         "quiz_state": None, "match_state": None, "exam_state": None,
         "district_state": None, "ordered_state": None, "neighbors_state": None,
         "region_stats": {},
+        "session": None,
+        "recent_answers": [],
     }
     save_users(users)
     await message.answer("✅ Статистика сброшена.")
 
 @dp.callback_query(F.data == "to_menu")
 async def to_menu(callback: types.CallbackQuery):
-    await bot.send_message(chat_id=callback.from_user.id, text="🚗 Главное меню:", reply_markup=main_menu_kb())
+    users, user = get_user(str(callback.from_user.id))
+    user["exam_state"] = None
+    save_users(users)
+    try:
+        await callback.message.edit_text("🚗 Главное меню:", reply_markup=main_menu_kb())
+    except Exception:
+        await bot.send_message(chat_id=callback.from_user.id, text="🚗 Главное меню:", reply_markup=main_menu_kb())
     await callback.answer()
 
 @dp.callback_query(F.data == "go_study_menu")
 async def go_study_menu(callback: types.CallbackQuery):
-    await bot.send_message(
-        chat_id=callback.from_user.id,
-        text="📚 <b>Изучение</b> — выбери режим:",
-        parse_mode="HTML",
-        reply_markup=study_menu_kb(),
-    )
+    try:
+        await callback.message.edit_text(
+            "📚 <b>Изучение</b> — выбери режим:",
+            parse_mode="HTML",
+            reply_markup=study_menu_kb(),
+        )
+    except Exception:
+        await bot.send_message(
+            chat_id=callback.from_user.id,
+            text="📚 <b>Изучение</b> — выбери режим:",
+            parse_mode="HTML",
+            reply_markup=study_menu_kb(),
+        )
     await callback.answer()
 
 @dp.callback_query(F.data == "go_game_menu")
@@ -350,10 +416,11 @@ async def reset_stats_yes(callback: types.CallbackQuery):
         "quiz_state": None, "match_state": None, "exam_state": None,
         "district_state": None, "ordered_state": None, "neighbors_state": None,
         "region_stats": {},
+        "session": None,
+        "recent_answers": [],
     }
     save_users(users)
     await callback.message.edit_text("✅ Статистика сброшена! Рейтинг сохранён.", reply_markup=back_kb())
-    await callback.answer()
 
 # ========== РЕЖИМ: КАРТОЧКИ (ВСЕ) ==========
 @dp.callback_query(F.data == "mode_cards_all")
@@ -566,15 +633,14 @@ async def send_neighbors_question(update):
         f"Какой регион между ними?"
     )
 
-    await bot.send_message(
-        chat_id=user_id,
-        text=text,
-        parse_mode="HTML",
-        reply_markup=builder.as_markup()
-    )
-
     if isinstance(update, types.CallbackQuery):
+        try:
+            await update.message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
+        except Exception:
+            await bot.send_message(chat_id=user_id, text=text, parse_mode="HTML", reply_markup=builder.as_markup())
         await update.answer()
+    else:
+        await bot.send_message(chat_id=user_id, text=text, parse_mode="HTML", reply_markup=builder.as_markup())
 
 @dp.callback_query(F.data.startswith("neighbors_"))
 async def handle_neighbors(callback: types.CallbackQuery):
@@ -800,6 +866,8 @@ async def handle_distest(callback: types.CallbackQuery):
         user["correct"] += 1
     else:
         user["wrong"] += 1
+    user.setdefault("recent_answers", []).append(1 if is_correct else 0)
+    user["recent_answers"] = user["recent_answers"][-30:]
     save_users(users)
 
     if is_correct:
@@ -1165,6 +1233,9 @@ async def handle_exam_answer(message: types.Message):
     else:
         user["wrong"] += 1
 
+    user.setdefault("recent_answers", []).append(1 if is_correct else 0)
+    user["recent_answers"] = user["recent_answers"][-30:]
+    
     if code:
         eff = DOP_TO_MAIN.get(code, code)
         if eff not in user["region_stats"]:
