@@ -75,6 +75,7 @@ def get_user(user_id: str):
             "recent_answers": [],
             "exam_round": None,
             "awaiting_study_jump": False,
+            "exam_notified": False,
         }
         save_users(users)
     return users, users[user_id]
@@ -195,6 +196,23 @@ def recent_accuracy_percent(user: dict, window: int = 30) -> float:
     if not recent:
         return 0.0
     return (sum(recent) / len(recent)) * 100
+
+async def check_exam_unlock(user_id: str, users: dict, user: dict):
+    recent = user.get("recent_answers", [])
+    unlocked = len(recent) >= 20 and recent_accuracy_percent(user) >= 70
+    if unlocked and not user.get("exam_notified"):
+        user["exam_notified"] = True
+        save_users(users)
+        try:
+            await bot.send_message(
+                chat_id=user_id,
+                text="🎉 Экзамен теперь открыт! Загляни в «📝 Экзамен» в главном меню.",
+            )
+        except Exception:
+            pass
+    elif not unlocked and user.get("exam_notified"):
+        user["exam_notified"] = False
+        save_users(users)
 
 def learned_regions_count(user: dict, threshold: float = 0.7, min_attempts: int = 2):
     stats = user.get("region_stats", {})
@@ -654,6 +672,7 @@ async def handle_neighbors(callback: types.CallbackQuery):
     users, user = get_user(str(callback.from_user.id))
     result = record_session_answer(user, is_correct, correct_code, regions[correct_code]["name"])
     save_users(users)
+    await check_exam_unlock(str(callback.from_user.id), users, user)
 
     if is_correct:
         await callback.answer(f"✅ Правильно! {correct_code} — {regions[correct_code]['name']}.", show_alert=True)
@@ -909,6 +928,7 @@ async def handle_distest(callback: types.CallbackQuery):
         else:
             test["wrong"].append(f"{correct_code} — {regions[correct_code]['name']}")
     save_users(users)
+    await check_exam_unlock(str(callback.from_user.id), users, user)
 
     if is_correct:
         await callback.answer(f"✅ Правильно! {correct_code} — {regions[correct_code]['name']}.", show_alert=True)
@@ -1009,6 +1029,7 @@ async def handle_quiz_answer(callback: types.CallbackQuery):
     users, user = get_user(str(callback.from_user.id))
     result = record_session_answer(user, is_correct, correct_code, regions[correct_code]["name"])
     save_users(users)
+    await check_exam_unlock(str(callback.from_user.id), users, user)
 
     if is_correct:
         await callback.answer(f"✅ Правильно! {correct_code} — {regions[correct_code]['name']}.", show_alert=True)
@@ -1111,6 +1132,7 @@ async def handle_match_answer(callback: types.CallbackQuery):
     users, user = get_user(str(callback.from_user.id))
     result = record_session_answer(user, is_correct, correct_code, regions[correct_code]["name"])
     save_users(users)
+    await check_exam_unlock(str(callback.from_user.id), users, user)
 
     if is_correct:
         await callback.answer(f"✅ Правильно! {correct_code} — {regions[correct_code]['name']}.", show_alert=True)
@@ -1224,6 +1246,7 @@ async def handle_tf_answer(callback: types.CallbackQuery):
     users, user = get_user(str(callback.from_user.id))
     result = record_session_answer(user, is_correct, code, regions[code]["name"])
     save_users(users)
+    await check_exam_unlock(str(callback.from_user.id), users, user)
 
     if is_correct:
         await callback.answer(f"✅ Правильно! {code} — {regions[code]['name']}.", show_alert=True)
@@ -1336,12 +1359,11 @@ async def handle_exam_answer(message: types.Message):
     users, user = get_user(str(message.chat.id))
 
     if user.get("awaiting_study_jump"):
-        user["awaiting_study_jump"] = False
         idx = find_jump_index(message.text)
         if idx is None:
-            save_users(users)
-            await message.answer("Не нашёл такой регион. Попробуй код, номер по порядку или название.")
+            await message.answer("Не нашёл такой регион. Попробуй код, номер по порядку или название (или напиши /start, чтобы отменить).")
             return
+        user["awaiting_study_jump"] = False
         ordered_state = user.get("ordered_state") or {"codes": ORDERED_CODES.copy(), "view": "detailed"}
         ordered_state["index"] = idx
         user["ordered_state"] = ordered_state
