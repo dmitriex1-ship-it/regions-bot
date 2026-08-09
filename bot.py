@@ -74,6 +74,7 @@ def get_user(user_id: str):
             "session": None,
             "recent_answers": [],
             "exam_round": None,
+            "awaiting_study_jump": False,
         }
         save_users(users)
     return users, users[user_id]
@@ -501,6 +502,7 @@ async def show_study_card(update):
     builder.row(*nav_buttons)
     toggle_text = "🔎 Кратко" if view == "detailed" else "📖 Подробно"
     builder.row(InlineKeyboardButton(text=toggle_text, callback_data="toggle_study_view"))
+    builder.row(InlineKeyboardButton(text="🔢 К региону", callback_data="study_jump_prompt"))
     builder.row(
         InlineKeyboardButton(text="📚 К изучению", callback_data="go_study_menu"),
         InlineKeyboardButton(text="🏠 В главное меню", callback_data="to_menu"),
@@ -551,6 +553,32 @@ async def toggle_study_view(callback: types.CallbackQuery):
         state["view"] = "brief" if state.get("view", "detailed") == "detailed" else "detailed"
         save_users(users)
     await show_study_card(callback)
+
+@dp.callback_query(F.data == "study_jump_prompt")
+async def study_jump_prompt(callback: types.CallbackQuery):
+    users, user = get_user(str(callback.from_user.id))
+    user["awaiting_study_jump"] = True
+    save_users(users)
+    await bot.send_message(
+        chat_id=callback.from_user.id,
+        text="Напиши код региона (например 50), номер по порядку (1-96) или название региона:",
+    )
+    await callback.answer()
+
+def find_jump_index(query: str) -> int | None:
+    q = query.strip().lower()
+    if q in regions:
+        return ORDERED_CODES.index(q)
+    if q.isdigit():
+        pos = int(q)
+        if 1 <= pos <= len(ORDERED_CODES):
+            return pos - 1
+    for i, code in enumerate(ORDERED_CODES):
+        name = regions[code]["name"].lower()
+        aliases = [a.lower() for a in regions[code].get("aliases", [])]
+        if q in name or q in aliases:
+            return i
+    return None
 
 # ========== ИГРА «СОСЕДИ» ==========
 @dp.callback_query(F.data == "mode_neighbors")
@@ -1306,6 +1334,21 @@ async def send_exam_question(update):
 @dp.message()
 async def handle_exam_answer(message: types.Message):
     users, user = get_user(str(message.chat.id))
+
+    if user.get("awaiting_study_jump"):
+        user["awaiting_study_jump"] = False
+        idx = find_jump_index(message.text)
+        if idx is None:
+            save_users(users)
+            await message.answer("Не нашёл такой регион. Попробуй код, номер по порядку или название.")
+            return
+        ordered_state = user.get("ordered_state") or {"codes": ORDERED_CODES.copy(), "view": "detailed"}
+        ordered_state["index"] = idx
+        user["ordered_state"] = ordered_state
+        save_users(users)
+        await show_study_card(message)
+        return
+
     state = user.get("exam_state")
     if state is None:
         await message.answer("Используй меню. /start для перезапуска.", reply_markup=main_menu_kb())
