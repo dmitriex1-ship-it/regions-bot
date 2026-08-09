@@ -31,7 +31,7 @@ DOP_TO_MAIN = {
 DISTRICTS = {
     "Центральный": ["31","32","33","36","37","40","44","46","48","50","57","62","67","68","69","71","76","77","150"],
     "Северо-Западный": ["10","11","29","35","39","47","51","53","60","78","83","178"],
-    "Южный": ["01","08","23","30","34","61","82","92","123","161"],
+    "Южный": ["01","08","23","30","34","61","80","81","82","84","85","92","123","161"],
     "Северо-Кавказский": ["05","06","07","09","15","20","26","95"],
     "Приволжский": ["02","12","13","16","18","21","43","52","56","58","59","63","64","73","116","152"],
     "Уральский": ["45","66","72","74","86","89","174","186"],
@@ -73,6 +73,7 @@ def get_user(user_id: str):
             "region_stats": {},
             "session": None,
             "recent_answers": [],
+            "exam_round": None,
         }
         save_users(users)
     return users, users[user_id]
@@ -376,8 +377,8 @@ async def cb_stats(callback: types.CallbackQuery):
     text += "<b>По режимам:</b>\n"
     text += f"🎯 Ассоциации: {user['quiz_correct']}/{user['quiz_total']} ({mode_percent(user, 'quiz'):.0f}%)\n"
     text += f"🧩 Найди пару: {user['match_correct']}/{user['match_total']} ({mode_percent(user, 'match'):.0f}%)\n"
-    text += f"🤝 Соседи: {user.get('neighbors_correct',0)}/{user.get('neighbors_total',0)} ({mode_percent(user, 'neighbors'):.0f}%)\n"
     text += f"⚡ Верно/Неверно: {user['tf_correct']}/{user['tf_total']} ({mode_percent(user, 'tf'):.0f}%)\n"
+    text += f"🤝 Соседи: {user.get('neighbors_correct', 0)}/{user.get('neighbors_total', 0)} ({mode_percent(user, 'neighbors'):.0f}%)\n"
     text += f"📝 Экзамен: {user['exam_correct']}/{user['exam_total']} ({mode_percent(user, 'exam'):.0f}%)\n"
 
     stats = user.get("region_stats", {})
@@ -393,7 +394,6 @@ async def cb_stats(callback: types.CallbackQuery):
                 text += f"{code} — {name}: {error_pct:.0f}%\n"
 
     builder = InlineKeyboardBuilder()
-    builder.button(text="🔄 Обновить", callback_data="stats")
     builder.button(text="🗑 Сбросить статистику", callback_data="reset_stats_confirm")
     builder.button(text="🏠 В главное меню", callback_data="to_menu")
     builder.adjust(1)
@@ -743,28 +743,49 @@ async def district_test(callback: types.CallbackQuery):
     if not state or not state.get("codes"):
         await callback.answer("Сначала выбери округ и посмотри карточки", show_alert=True)
         return
-    # Отправляем новое сообщение для теста
-    await bot.send_message(
-        chat_id=callback.from_user.id,
-        text="Загрузка теста..."
-    )
+    state["test"] = {"asked": [], "correct": 0, "wrong": []}
+    save_users(users)
+    await bot.send_message(chat_id=callback.from_user.id, text="Загрузка теста...")
+    await send_district_test_question(callback)
+
+@dp.callback_query(F.data == "distest_continue")
+async def distest_continue(callback: types.CallbackQuery):
     await send_district_test_question(callback)
 
 async def send_district_test_question(update):
-    # Всегда отправляем новое сообщение
     if isinstance(update, types.CallbackQuery):
         user_id = str(update.from_user.id)
     else:
         user_id = str(update.chat.id)
 
-    _, user = get_user(user_id)
+    users, user = get_user(user_id)
     state = user.get("district_state")
     codes_pool = state.get("codes", [])
+    test = state.get("test") or {"asked": [], "correct": 0, "wrong": []}
+    remaining = [c for c in codes_pool if c not in test["asked"]]
 
-    code = random.choice(codes_pool)
+    if not remaining:
+        total = len(codes_pool)
+        pct = (test["correct"] / total) * 100 if total else 0
+        text = f"🏁 <b>Тест «{state['district']}» завершён!</b>\n\n✅ Правильно: {test['correct']}/{total} ({pct:.0f}%)\n"
+        if test["wrong"]:
+            text += "\n❌ Ошибся в:\n" + "\n".join(test["wrong"])
+        state["test"] = None
+        save_users(users)
+
+        builder = InlineKeyboardBuilder()
+        builder.button(text="🔁 Пройти ещё раз", callback_data="district_test")
+        builder.button(text="🗺 Выбрать другой округ", callback_data="mode_district")
+        builder.button(text="🏠 В главное меню", callback_data="to_menu")
+        builder.adjust(1)
+        await bot.send_message(chat_id=user_id, text=text, parse_mode="HTML", reply_markup=builder.as_markup())
+        if isinstance(update, types.CallbackQuery):
+            await update.answer()
+        return
+
+    code = random.choice(remaining)
     region = regions[code]
 
-    other = [c for c in ALL_CODES if c != code]
     wrong = build_wrong_options(code)
     options = wrong + [code]
     random.shuffle(options)
@@ -775,22 +796,22 @@ async def send_district_test_question(update):
     builder.adjust(1)
     builder.row(InlineKeyboardButton(text="🗺 Выбрать другой", callback_data="mode_district"))
 
+    progress = f"{len(test['asked']) + 1} / {len(codes_pool)}"
     text = (
-        f"🧪 <b>Тест: {state['district']}</b>\n\n"
+        f"🧪 <b>Тест: {state['district']}</b> ({progress})\n\n"
         f"Код: <b>{code}</b>\n"
         f"<i>{region['hint']}</i>\n\n"
         f"Выбери регион:"
     )
 
-    await bot.send_message(
-        chat_id=user_id,
-        text=text,
-        parse_mode="HTML",
-        reply_markup=builder.as_markup()
-    )
-
     if isinstance(update, types.CallbackQuery):
+        try:
+            await update.message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
+        except Exception:
+            await bot.send_message(chat_id=user_id, text=text, parse_mode="HTML", reply_markup=builder.as_markup())
         await update.answer()
+    else:
+        await bot.send_message(chat_id=user_id, text=text, parse_mode="HTML", reply_markup=builder.as_markup())
 
 @dp.callback_query(F.data.startswith("district_"))
 async def district_selected(callback: types.CallbackQuery):
@@ -850,6 +871,15 @@ async def handle_distest(callback: types.CallbackQuery):
         user["wrong"] += 1
     user.setdefault("recent_answers", []).append(1 if is_correct else 0)
     user["recent_answers"] = user["recent_answers"][-30:]
+
+    state = user.get("district_state")
+    if state and state.get("test"):
+        test = state["test"]
+        test["asked"].append(correct_code)
+        if is_correct:
+            test["correct"] += 1
+        else:
+            test["wrong"].append(f"{correct_code} — {regions[correct_code]['name']}")
     save_users(users)
 
     if is_correct:
@@ -862,7 +892,7 @@ async def handle_distest(callback: types.CallbackQuery):
             f"<i>{regions[correct_code]['facts']}</i>"
         )
         builder = InlineKeyboardBuilder()
-        builder.button(text="▶️ Дальше", callback_data="district_test")
+        builder.button(text="▶️ Дальше", callback_data="distest_continue")
         builder.button(text="🗺 Выбрать другой", callback_data="mode_district")
         builder.row(InlineKeyboardButton(text="🏠 В главное меню", callback_data="to_menu"))
         builder.adjust(1)
@@ -1198,7 +1228,7 @@ async def handle_tf_answer(callback: types.CallbackQuery):
 # ========== РЕЖИМ 4: ЭКЗАМЕН ==========
 @dp.callback_query(F.data == "mode_exam")
 async def start_exam(callback: types.CallbackQuery):
-    _, user = get_user(str(callback.from_user.id))
+    users, user = get_user(str(callback.from_user.id))
     recent = user.get("recent_answers", [])
     if len(recent) < 20:
         await callback.answer(
@@ -1210,6 +1240,8 @@ async def start_exam(callback: types.CallbackQuery):
     if pct < 70:
         await callback.answer(f"🔒 Экзамен закрыт! Нужно 70% точности за последние 30 ответов. Сейчас: {pct:.1f}%", show_alert=True)
         return
+    user["exam_round"] = {"asked": [], "correct": 0, "wrong": []}
+    save_users(users)
     await send_exam_question(callback)
 
 async def send_exam_question(update):
@@ -1222,20 +1254,44 @@ async def send_exam_question(update):
         msg = update
         is_cb = False
 
-    code = random.choice(ALL_CODES)
+    users, user = get_user(user_id)
+    exam_round = user.get("exam_round") or {"asked": [], "correct": 0, "wrong": []}
+    remaining = [c for c in ALL_CODES if c not in exam_round["asked"]]
+
+    if not remaining:
+        total = len(ALL_CODES)
+        pct = (exam_round["correct"] / total) * 100 if total else 0
+        text = f"🏁 <b>Экзамен завершён!</b>\n\n✅ Правильно: {exam_round['correct']}/{total} ({pct:.0f}%)\n"
+        if exam_round["wrong"]:
+            text += "\n❌ Ошибся в:\n" + "\n".join(exam_round["wrong"])
+        user["exam_round"] = None
+        user["exam_state"] = None
+        save_users(users)
+
+        builder = InlineKeyboardBuilder()
+        builder.row(InlineKeyboardButton(text="🏠 В главное меню", callback_data="to_menu"))
+        if is_cb:
+            await msg.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
+        else:
+            await msg.answer(text, parse_mode="HTML", reply_markup=builder.as_markup())
+        if isinstance(update, types.CallbackQuery):
+            await update.answer()
+        return
+
+    code = random.choice(remaining)
     region = regions[code]
+    progress = f"{len(exam_round['asked']) + 1} / {len(ALL_CODES)}"
 
     builder = InlineKeyboardBuilder()
     builder.row(InlineKeyboardButton(text="🏠 В главное меню", callback_data="to_menu"))
 
     text = (
-        f"📝 <b>ЭКЗАМЕН</b> — введи название вручную\n\n"
+        f"📝 <b>ЭКЗАМЕН</b> ({progress}) — введи название вручную\n\n"
         f"Код: <b>{code}</b>\n"
         f"<i>{region['hint']}</i>\n\n"
         f"Напиши ответ текстом:"
     )
 
-    users, user = get_user(user_id)
     user["exam_state"] = {"code": code}
     save_users(users)
 
@@ -1281,6 +1337,13 @@ async def handle_exam_answer(message: types.Message):
             user["region_stats"][eff]["correct"] += 1
 
     user["exam_state"] = None
+    exam_round = user.get("exam_round")
+    if exam_round is not None:
+        exam_round["asked"].append(code)
+        if is_correct:
+            exam_round["correct"] += 1
+        else:
+            exam_round["wrong"].append(f"{code} — {region['name']}")
     save_users(users)
 
     if is_correct:
