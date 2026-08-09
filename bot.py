@@ -672,7 +672,6 @@ async def handle_neighbors(callback: types.CallbackQuery):
     users, user = get_user(str(callback.from_user.id))
     result = record_session_answer(user, is_correct, correct_code, regions[correct_code]["name"])
     save_users(users)
-    await check_exam_unlock(str(callback.from_user.id), users, user)
 
     if is_correct:
         await callback.answer(f"✅ Правильно! {correct_code} — {regions[correct_code]['name']}.", show_alert=True)
@@ -701,6 +700,8 @@ async def handle_neighbors(callback: types.CallbackQuery):
 
         if result:
             await show_session_result(callback.from_user.id, result, "mode_neighbors")
+
+    await check_exam_unlock(str(callback.from_user.id), users, user)
 
 # ========== РЕЖИМ: ПО ОКРУГАМ ==========
 @dp.callback_query(F.data == "mode_district")
@@ -928,7 +929,6 @@ async def handle_distest(callback: types.CallbackQuery):
         else:
             test["wrong"].append(f"{correct_code} — {regions[correct_code]['name']}")
     save_users(users)
-    await check_exam_unlock(str(callback.from_user.id), users, user)
 
     if is_correct:
         await callback.answer(f"✅ Правильно! {correct_code} — {regions[correct_code]['name']}.", show_alert=True)
@@ -952,6 +952,8 @@ async def handle_distest(callback: types.CallbackQuery):
         else:
             await callback.message.reply(new_text, parse_mode="HTML", reply_markup=builder.as_markup())
         await callback.answer()
+
+    await check_exam_unlock(str(callback.from_user.id), users, user)
 
 # ========== РЕЖИМ 1: УГАДАЙ ПО АССОЦИАЦИИ ==========
 @dp.callback_query(F.data == "mode_quiz")
@@ -1029,7 +1031,6 @@ async def handle_quiz_answer(callback: types.CallbackQuery):
     users, user = get_user(str(callback.from_user.id))
     result = record_session_answer(user, is_correct, correct_code, regions[correct_code]["name"])
     save_users(users)
-    await check_exam_unlock(str(callback.from_user.id), users, user)
 
     if is_correct:
         await callback.answer(f"✅ Правильно! {correct_code} — {regions[correct_code]['name']}.", show_alert=True)
@@ -1058,6 +1059,8 @@ async def handle_quiz_answer(callback: types.CallbackQuery):
 
         if result:
             await show_session_result(callback.from_user.id, result, "mode_quiz")
+
+    await check_exam_unlock(str(callback.from_user.id), users, user)
 
 # ========== РЕЖИМ 2: НАЙДИ ПАРУ ==========
 @dp.callback_query(F.data == "mode_match")
@@ -1132,7 +1135,6 @@ async def handle_match_answer(callback: types.CallbackQuery):
     users, user = get_user(str(callback.from_user.id))
     result = record_session_answer(user, is_correct, correct_code, regions[correct_code]["name"])
     save_users(users)
-    await check_exam_unlock(str(callback.from_user.id), users, user)
 
     if is_correct:
         await callback.answer(f"✅ Правильно! {correct_code} — {regions[correct_code]['name']}.", show_alert=True)
@@ -1161,6 +1163,8 @@ async def handle_match_answer(callback: types.CallbackQuery):
 
         if result:
             await show_session_result(callback.from_user.id, result, "mode_match")
+
+    await check_exam_unlock(str(callback.from_user.id), users, user)
 
 # ========== РЕЖИМ 3: ВЕРНО / НЕВЕРНО ==========
 @dp.callback_query(F.data == "mode_truefalse")
@@ -1246,7 +1250,6 @@ async def handle_tf_answer(callback: types.CallbackQuery):
     users, user = get_user(str(callback.from_user.id))
     result = record_session_answer(user, is_correct, code, regions[code]["name"])
     save_users(users)
-    await check_exam_unlock(str(callback.from_user.id), users, user)
 
     if is_correct:
         await callback.answer(f"✅ Правильно! {code} — {regions[code]['name']}.", show_alert=True)
@@ -1275,6 +1278,8 @@ async def handle_tf_answer(callback: types.CallbackQuery):
 
         if result:
             await show_session_result(callback.from_user.id, result, "mode_truefalse")
+
+    await check_exam_unlock(str(callback.from_user.id), users, user)
 
 # ========== РЕЖИМ 4: ЭКЗАМЕН ==========
 @dp.callback_query(F.data == "mode_exam")
@@ -1380,7 +1385,10 @@ async def handle_exam_answer(message: types.Message):
     region = regions[code]
     user_answer = message.text.strip().lower()
     correct_names = [region["name"].lower()] + [a.lower() for a in region.get("aliases", [])]
-    is_correct = any(name in user_answer or user_answer in name for name in correct_names)
+    is_correct = any(
+        user_answer == name or (len(user_answer) >= 4 and (user_answer in name or name in user_answer))
+        for name in correct_names
+    )
 
     user["total"] += 1
     user["exam_total"] += 1
