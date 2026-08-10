@@ -943,7 +943,7 @@ async def handle_distest(callback: types.CallbackQuery):
 if is_correct:
         await callback.answer(f"✅ Правильно! {correct_code} — {clean_name(correct_code)}.", show_alert=True)
         await send_district_test_question(callback)
-    else:
+        else:
         new_text = (
             f"❌ Неправильно.\n\n"
             f"{correct_code} — это {clean_name(correct_code)}.\n"
