@@ -23,19 +23,19 @@ DATA_FILE = Path("regions_data.json")
 USERS_FILE = Path("users.json")
 
 DOP_TO_MAIN = {
-    "95": "20", "116": "16", "123": "23", "138": "38",
+    "93": "23", "95": "20", "116": "16", "123": "23", "138": "38",
     "150": "50", "152": "52", "154": "54", "161": "61",
     "174": "74", "178": "78", "186": "86", "777": "77",
 }
 
 DISTRICTS = {
-    "Центральный": ["31","32","33","36","37","40","44","46","48","50","57","62","67","68","69","71","76","77","150"],
-    "Северо-Западный": ["10","11","29","35","39","47","51","53","60","78","83","178"],
-    "Южный": ["01","08","23","30","34","61","80","81","82","84","85","92","123","161"],
-    "Северо-Кавказский": ["05","06","07","09","15","20","26","95"],
-    "Приволжский": ["02","12","13","16","18","21","43","52","56","58","59","63","64","73","116","152"],
-    "Уральский": ["45","66","72","74","86","89","174","186"],
-    "Сибирский": ["03","04","17","19","22","24","38","42","54","55","70","138","154"],
+    "Центральный": ["31","32","33","36","37","40","44","46","48","50","57","62","67","68","69","71","76","77"],
+    "Северо-Западный": ["10","11","29","35","39","47","51","53","60","78","83"],
+    "Южный": ["01","08","23","30","34","61","80","81","82","84","85","92"],
+    "Северо-Кавказский": ["05","06","07","09","15","20","26"],
+    "Приволжский": ["02","12","13","16","18","21","43","52","56","58","59","63","64","73"],
+    "Уральский": ["45","66","72","74","86","89"],
+    "Сибирский": ["03","04","17","19","22","24","38","42","54","55","70"],
     "Дальневосточный": ["14","25","27","28","41","49","65","75","79","87"],
 }
 
@@ -46,6 +46,7 @@ with open(DATA_FILE, "r", encoding="utf-8") as f:
 ALL_CODES = list(regions.keys())
 ORDERED_CODES = sorted(ALL_CODES, key=lambda x: int(x))
 TOTAL_REGIONS = len({DOP_TO_MAIN.get(c, c) for c in ALL_CODES})
+DISTRICTS = {d: [c for c in codes if c in regions] for d, codes in DISTRICTS.items()}
 
 # -------------------- ХРАНЕНИЕ ПОЛЬЗОВАТЕЛЕЙ --------------------
 def load_users():
@@ -124,6 +125,13 @@ def update_stats(user_id: str, correct: bool, mode: str = "quiz", code: str = No
 
 # -------------------- ПОМОЩНИКИ --------------------
 def get_effective_code(code: str) -> str:
+    return DOP_TO_MAIN.get(code, code)
+
+def clean_name(code: str) -> str:
+    return regions[code]["name"].replace(" (доп.)", "")
+
+def codes_for_region(base_code: str) -> list:
+    return sorted([c for c in ALL_CODES if get_effective_code(c) == base_code], key=lambda x: int(x))
     return DOP_TO_MAIN.get(code, code)
 
 def image_exists(code: str) -> bool:
@@ -283,11 +291,11 @@ def district_menu_kb():
     builder = InlineKeyboardBuilder()
     for d in DISTRICTS:
         builder.button(text=f"{d} ({len(DISTRICTS[d])})", callback_data=f"district_{d}")
+    builder.adjust(1)
     builder.row(
         InlineKeyboardButton(text="📚 К изучению", callback_data="go_study_menu"),
         InlineKeyboardButton(text="🏠 В главное меню", callback_data="to_menu"),
     )
-    builder.adjust(1)
     return builder.as_markup()
 
 def back_kb():
@@ -674,7 +682,7 @@ async def handle_neighbors(callback: types.CallbackQuery):
     save_users(users)
 
     if is_correct:
-        await callback.answer(f"✅ Правильно! {correct_code} — {regions[correct_code]['name']}.", show_alert=True)
+        await callback.answer(f"✅ Правильно! {correct_code} — {clean_name(correct_code)}.", show_alert=True)
         if result:
             await show_session_result(callback.from_user.id, result, "mode_neighbors")
         else:
@@ -682,7 +690,7 @@ async def handle_neighbors(callback: types.CallbackQuery):
     else:
         new_text = (
             f"❌ Неправильно.\n\n"
-            f"{correct_code} — это {regions[correct_code]['name']}.\n"
+            f"{correct_code} — это {clean_name(correct_code)}.\n"
             f"<i>{regions[correct_code]['facts']}</i>"
         )
         builder = InlineKeyboardBuilder()
@@ -730,17 +738,18 @@ async def show_district_card(update):
     if not state:
         return
     codes = state.get("codes", [])
-    if state["index"] >= len(codes):
+    if not codes or state["index"] >= len(codes):
         district = state.get("district", "округ")
         text = f"✅ Все регионы округа «{district}» пройдены!"
         builder = InlineKeyboardBuilder()
         builder.button(text="🧪 Тест по округу", callback_data="district_test")
         builder.button(text="🗺 Выбрать другой", callback_data="mode_district")
         builder.button(text="📚 К изучению", callback_data="go_study_menu")
+        builder.adjust(1)
         try:
             await msg.edit_text(text, reply_markup=builder.as_markup())
-        except:
-            pass
+        except Exception:
+            await bot.send_message(chat_id=user_id, text=text, reply_markup=builder.as_markup())
         if isinstance(update, types.CallbackQuery):
             await update.answer()
         return
@@ -748,11 +757,12 @@ async def show_district_card(update):
     code = codes[state["index"]]
     region = regions[code]
     progress_text = f"{state['index'] + 1} / {len(codes)}"
+    codes_label = ", ".join(codes_for_region(code))
 
     text = (
         f"📖 <b>{state['district']} — {progress_text}</b>\n\n"
-        f"Код: <b>{code}</b>\n"
-        f"Регион: <b>{region['name']}</b>\n\n"
+        f"Коды: <b>{codes_label}</b>\n"
+        f"Регион: <b>{clean_name(code)}</b>\n\n"
         f"💡 <i>{region['hint']}</i>\n"
         f"💡 <i>{region['hint2']}</i>\n\n"
         f"📌 {region['facts']}"
@@ -762,14 +772,15 @@ async def show_district_card(update):
     nav_buttons = []
     if state["index"] > 0:
         nav_buttons.append(InlineKeyboardButton(text="⬅️ Назад", callback_data="prev_district_card"))
-    nav_buttons.append(InlineKeyboardButton(text="▶️ Дальше", callback_data="next_district_card"))
-    builder.row(*nav_buttons)
+    if state["index"] < len(codes) - 1:
+        nav_buttons.append(InlineKeyboardButton(text="▶️ Дальше", callback_data="next_district_card"))
+    if nav_buttons:
+        builder.row(*nav_buttons)
     builder.row(InlineKeyboardButton(text="🧪 Тест по округу", callback_data="district_test"))
     builder.row(
         InlineKeyboardButton(text="🗺 Выбрать другой", callback_data="mode_district"),
         InlineKeyboardButton(text="🏠 В главное меню", callback_data="to_menu"),
     )
-    builder.adjust(1)
 
     img_path = get_image_path(code)
     try:
@@ -778,8 +789,8 @@ async def show_district_card(update):
             await msg.edit_media(InputMediaPhoto(media=photo, caption=text, parse_mode="HTML"), reply_markup=builder.as_markup())
         else:
             await msg.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
-    except:
-        pass
+    except Exception:
+        await bot.send_message(chat_id=user_id, text=text, parse_mode="HTML", reply_markup=builder.as_markup())
 
     if isinstance(update, types.CallbackQuery):
         await update.answer()
@@ -793,7 +804,6 @@ async def district_test(callback: types.CallbackQuery):
         return
     state["test"] = {"asked": [], "correct": 0, "wrong": []}
     save_users(users)
-    await bot.send_message(chat_id=callback.from_user.id, text="Загрузка теста...")
     await send_district_test_question(callback)
 
 @dp.callback_query(F.data == "distest_continue")
@@ -833,6 +843,7 @@ async def send_district_test_question(update):
 
     code = random.choice(remaining)
     region = regions[code]
+    codes_label = ", ".join(codes_for_region(code))
 
     wrong = build_wrong_options(code)
     options = wrong + [code]
@@ -840,14 +851,14 @@ async def send_district_test_question(update):
 
     builder = InlineKeyboardBuilder()
     for opt in options:
-        builder.button(text=regions[opt]["name"], callback_data=f"distest_{code}_{opt}")
+        builder.button(text=clean_name(opt), callback_data=f"distest_{code}_{opt}")
     builder.adjust(1)
     builder.row(InlineKeyboardButton(text="🗺 Выбрать другой", callback_data="mode_district"))
 
     progress = f"{len(test['asked']) + 1} / {len(codes_pool)}"
     text = (
         f"🧪 <b>Тест: {state['district']}</b> ({progress})\n\n"
-        f"Код: <b>{code}</b>\n"
+        f"Коды: <b>{codes_label}</b>\n"
         f"<i>{region['hint']}</i>\n\n"
         f"Выбери регион:"
     )
@@ -880,11 +891,11 @@ async def district_selected(callback: types.CallbackQuery):
     builder.button(text="📖 Карточки округа", callback_data="district_cards")
     builder.button(text="🧪 Тест по округу", callback_data="district_test")
     builder.button(text="🗺 Выбрать другой", callback_data="mode_district")
+    builder.adjust(1)
     builder.row(
         InlineKeyboardButton(text="📚 К изучению", callback_data="go_study_menu"),
         InlineKeyboardButton(text="🏠 В главное меню", callback_data="to_menu"),
     )
-    builder.adjust(1)
 
     await callback.message.edit_text(
         f"🗺 <b>{district}</b> — {len(codes)} регионов.\nВыбери действие:",
@@ -927,16 +938,15 @@ async def handle_distest(callback: types.CallbackQuery):
         if is_correct:
             test["correct"] += 1
         else:
-            test["wrong"].append(f"{correct_code} — {regions[correct_code]['name']}")
+            test["wrong"].append(f"{correct_code} — {clean_name(correct_code)}")
     save_users(users)
-
-    if is_correct:
-        await callback.answer(f"✅ Правильно! {correct_code} — {regions[correct_code]['name']}.", show_alert=True)
+if is_correct:
+        await callback.answer(f"✅ Правильно! {correct_code} — {clean_name(correct_code)}.", show_alert=True)
         await send_district_test_question(callback)
     else:
         new_text = (
             f"❌ Неправильно.\n\n"
-            f"{correct_code} — это {regions[correct_code]['name']}.\n"
+            f"{correct_code} — это {clean_name(correct_code)}.\n"
             f"<i>{regions[correct_code]['facts']}</i>"
         )
         builder = InlineKeyboardBuilder()
@@ -986,7 +996,7 @@ async def send_quiz_question(update):
 
     builder = InlineKeyboardBuilder()
     for opt in options:
-        builder.button(text=f"{regions[opt]['name']}", callback_data=f"quiz_answer_{code}_{opt}")
+        builder.button(text=clean_name(opt), callback_data=f"quiz_answer_{code}_{opt}")
     builder.adjust(1)
     if image_exists(code):
         builder.row(InlineKeyboardButton(text="💡 Подсказка", callback_data=f"unblur_{code}"))
@@ -1033,7 +1043,7 @@ async def handle_quiz_answer(callback: types.CallbackQuery):
     save_users(users)
 
     if is_correct:
-        await callback.answer(f"✅ Правильно! {correct_code} — {regions[correct_code]['name']}.", show_alert=True)
+        await callback.answer(f"✅ Правильно! {correct_code} — {clean_name(correct_code)}.", show_alert=True)
         if result:
             await show_session_result(callback.from_user.id, result, "mode_quiz")
         else:
@@ -1041,7 +1051,7 @@ async def handle_quiz_answer(callback: types.CallbackQuery):
     else:
         new_text = (
             f"❌ Неправильно.\n\n"
-            f"{correct_code} — это {regions[correct_code]['name']}.\n"
+            f"{correct_code} — это {clean_name(correct_code)}.\n"
             f"<i>{regions[correct_code]['facts']}</i>"
         )
         builder = InlineKeyboardBuilder()
@@ -1092,11 +1102,15 @@ async def send_match_question(update):
 
     builder = InlineKeyboardBuilder()
     for opt in options:
-        builder.button(text=f"{regions[opt]['name']}", callback_data=f"match_answer_{code}_{opt}")
+        builder.button(text=clean_name(opt), callback_data=f"match_answer_{code}_{opt}")
     builder.adjust(1)
     if image_exists(code):
-        builder.row(InlineKeyboardButton(text="💡 Подсказка", callback_data=f"unblur_{code}"))
-    builder.row(InlineKeyboardButton(text="🏠 В главное меню", callback_data="to_menu"))
+        builder.row(
+            InlineKeyboardButton(text="💡 Подсказка", callback_data=f"unblur_{code}"),
+            InlineKeyboardButton(text="🏠 В главное меню", callback_data="to_menu"),
+        )
+    else:
+        builder.row(InlineKeyboardButton(text="🏠 В главное меню", callback_data="to_menu"))
 
     text = (
         f"🧩 <b>Найди пару</b>\n\n"
@@ -1137,7 +1151,7 @@ async def handle_match_answer(callback: types.CallbackQuery):
     save_users(users)
 
     if is_correct:
-        await callback.answer(f"✅ Правильно! {correct_code} — {regions[correct_code]['name']}.", show_alert=True)
+        await callback.answer(f"✅ Правильно! {correct_code} — {clean_name(correct_code)}.", show_alert=True)
         if result:
             await show_session_result(callback.from_user.id, result, "mode_match")
         else:
@@ -1145,7 +1159,7 @@ async def handle_match_answer(callback: types.CallbackQuery):
     else:
         new_text = (
             f"❌ Неправильно.\n\n"
-            f"{correct_code} — это {regions[correct_code]['name']}.\n"
+            f"{correct_code} — это {clean_name(correct_code)}.\n"
             f"<i>{regions[correct_code]['facts']}</i>"
         )
         builder = InlineKeyboardBuilder()
@@ -1188,12 +1202,12 @@ async def send_truefalse_question(update):
     region = regions[code]
 
     if random.random() < 0.5:
-        shown_name = region["name"]
+        shown_name = clean_name(code)
         correct_answer = True
     else:
         other_codes = [c for c in ALL_CODES if c != code]
         wrong_code = random.choice(other_codes)
-        shown_name = regions[wrong_code]["name"]
+        shown_name = clean_name(wrong_code)
         correct_answer = False
 
     builder = InlineKeyboardBuilder()
@@ -1252,7 +1266,7 @@ async def handle_tf_answer(callback: types.CallbackQuery):
     save_users(users)
 
     if is_correct:
-        await callback.answer(f"✅ Правильно! {code} — {regions[code]['name']}.", show_alert=True)
+        await callback.answer(f"✅ Правильно! {code} — {clean_name(code)}.", show_alert=True)
         if result:
             await show_session_result(callback.from_user.id, result, "mode_truefalse")
         else:
@@ -1260,7 +1274,7 @@ async def handle_tf_answer(callback: types.CallbackQuery):
     else:
         new_text = (
             f"❌ Неправильно.\n\n"
-            f"{code} — это {regions[code]['name']}.\n"
+            f"{code} — это {clean_name(code)}.\n"
             f"<i>{regions[code]['facts']}</i>"
         )
         builder = InlineKeyboardBuilder()
@@ -1420,12 +1434,12 @@ async def handle_exam_answer(message: types.Message):
     save_users(users)
 
     if is_correct:
-        await message.answer(f"✅ Правильно! Это {code} — {region['name']}.")
+        await message.answer(f"✅ Правильно! Это {code} — {clean_name(code)}.")
     else:
         builder = InlineKeyboardBuilder()
         builder.row(InlineKeyboardButton(text="🏠 В главное меню", callback_data="to_menu"))
         await message.answer(
-            f"❌ Неправильно. {code} — это {region['name']}.\n\n{region['facts']}",
+            f"❌ Неправильно. {code} — это {clean_name(code)}.\n\n{region['facts']}",
             parse_mode="HTML",
             reply_markup=builder.as_markup()
         )
