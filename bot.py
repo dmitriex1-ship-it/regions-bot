@@ -507,7 +507,7 @@ async def show_study_card(update):
         text = (
             f"📖 <b>Карточка {progress_text}</b>\n\n"
             f"Код: <b>{code}</b>\n"
-            f"Регион: <b>{region['name']}</b>\n"
+            f"Регион: <b>{clean_name(code)}</b>\n"
             f"Округ: {region.get('district', '—')}\n\n"
             f"💡 <i>{region['hint']}</i>\n"
             f"💡 <i>{region['hint2']}</i>\n\n"
@@ -516,7 +516,7 @@ async def show_study_card(update):
     else:
         text = (
             f"📜 <b>{progress_text}</b>\n\n"
-            f"<b>{code}</b> — {region['name']}\n"
+            f"<b>{code}</b> — {clean_name(code)}\n"
             f"Округ: {region.get('district', '—')}"
         )
 
@@ -1430,7 +1430,7 @@ async def handle_exam_answer(message: types.Message):
         if is_correct:
             exam_round["correct"] += 1
         else:
-            exam_round["wrong"].append(f"{code} — {region['name']}")
+            exam_round["wrong"].append(f"{code} — {clean_name(code)}")
     save_users(users)
 
     if is_correct:
@@ -1560,7 +1560,7 @@ async def unblur_image(callback: types.CallbackQuery):
         photo = FSInputFile(img_path)
         await callback.message.reply_photo(
             photo,
-            caption=f"🗺 <b>{code} — {regions[code]['name']}</b>\n\n<i>{regions[code]['facts']}</i>",
+            caption=f"🗺 <b>{code} — {clean_name(code)}</b>\n\n<i>{regions[code]['facts']}</i>",
             parse_mode="HTML",
         )
     await callback.answer()
