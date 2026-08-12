@@ -591,7 +591,7 @@ async def study_jump_prompt(callback: types.CallbackQuery):
     save_users(users)
     await bot.send_message(
         chat_id=callback.from_user.id,
-        text="Напиши код региона (например 50), номер по порядку (1-95) или название региона:",
+        text="Напиши код региона (например 50 или 95), порядковый номер в списке из 89 регионов, или название региона:",
     )
     await callback.answer()
 
