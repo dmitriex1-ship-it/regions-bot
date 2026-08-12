@@ -1199,7 +1199,10 @@ async def send_truefalse_question(update):
         msg = update
         is_cb = False
 
-    code = random.choice(ALL_CODES)
+    _, user_for_last = get_user(user_id)
+    last_code = (user_for_last.get("quiz_state") or {}).get("code")
+    pool = [c for c in ALL_CODES if c != last_code] or ALL_CODES
+    code = random.choice(pool)
     region = regions[code]
 
     if random.random() < 0.5:
