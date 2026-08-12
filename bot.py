@@ -528,8 +528,10 @@ async def show_study_card(update):
     nav_buttons = []
     if state["index"] > 0:
         nav_buttons.append(InlineKeyboardButton(text="⬅️ Назад", callback_data="prev_study_card"))
-    nav_buttons.append(InlineKeyboardButton(text="▶️ Дальше", callback_data="next_study_card"))
-    builder.row(*nav_buttons)
+    if state["index"] < len(state["codes"]) - 1:
+        nav_buttons.append(InlineKeyboardButton(text="▶️ Дальше", callback_data="next_study_card"))
+    if nav_buttons:
+        builder.row(*nav_buttons)
     toggle_text = "🔎 Кратко" if view == "detailed" else "📖 Подробно"
     builder.row(InlineKeyboardButton(text=toggle_text, callback_data="toggle_study_view"))
     builder.row(InlineKeyboardButton(text="🔢 К региону", callback_data="study_jump_prompt"))
