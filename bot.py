@@ -47,6 +47,8 @@ ALL_CODES = list(regions.keys())
 ORDERED_CODES = sorted(ALL_CODES, key=lambda x: int(x))
 TOTAL_REGIONS = len({DOP_TO_MAIN.get(c, c) for c in ALL_CODES})
 DISTRICTS = {d: [c for c in codes if c in regions] for d, codes in DISTRICTS.items()}
+BASE_CODES = [c for c in ALL_CODES if c not in DOP_TO_MAIN]
+BASE_ORDERED_CODES = sorted(BASE_CODES, key=lambda x: int(x))
 
 # -------------------- ХРАНЕНИЕ ПОЛЬЗОВАТЕЛЕЙ --------------------
 def load_users():
@@ -471,7 +473,7 @@ async def reset_stats_yes(callback: types.CallbackQuery):
 @dp.callback_query(F.data == "mode_study_cards")
 async def start_study_cards(callback: types.CallbackQuery):
     users, user = get_user(str(callback.from_user.id))
-    user["ordered_state"] = {"index": 0, "codes": ORDERED_CODES.copy(), "view": "detailed"}
+    user["ordered_state"] = {"index": 0, "codes": BASE_ORDERED_CODES.copy(), "view": "detailed"}
     save_users(users)
     await show_study_card(callback)
 
@@ -503,10 +505,12 @@ async def show_study_card(update):
     progress_text = f"{state['index'] + 1} / {len(state['codes'])}"
     view = state.get("view", "detailed")
 
+    codes_label = ", ".join(codes_for_region(code))
+
     if view == "detailed":
         text = (
             f"📖 <b>Карточка {progress_text}</b>\n\n"
-            f"Код: <b>{code}</b>\n"
+            f"Коды: <b>{codes_label}</b>\n"
             f"Регион: <b>{clean_name(code)}</b>\n"
             f"Округ: {region.get('district', '—')}\n\n"
             f"💡 <i>{region['hint']}</i>\n"
@@ -516,7 +520,7 @@ async def show_study_card(update):
     else:
         text = (
             f"📜 <b>{progress_text}</b>\n\n"
-            f"<b>{code}</b> — {clean_name(code)}\n"
+            f"<b>{codes_label}</b> — {clean_name(code)}\n"
             f"Округ: {region.get('district', '—')}"
         )
 
@@ -594,12 +598,14 @@ async def study_jump_prompt(callback: types.CallbackQuery):
 def find_jump_index(query: str) -> int | None:
     q = query.strip().lower()
     if q in regions:
-        return ORDERED_CODES.index(q)
+        base = get_effective_code(q)
+        if base in BASE_ORDERED_CODES:
+            return BASE_ORDERED_CODES.index(base)
     if q.isdigit():
         pos = int(q)
-        if 1 <= pos <= len(ORDERED_CODES):
+        if 1 <= pos <= len(BASE_ORDERED_CODES):
             return pos - 1
-    for i, code in enumerate(ORDERED_CODES):
+    for i, code in enumerate(BASE_ORDERED_CODES):
         name = regions[code]["name"].lower()
         aliases = [a.lower() for a in regions[code].get("aliases", [])]
         if q in name or q in aliases:
