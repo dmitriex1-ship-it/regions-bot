@@ -1344,6 +1344,15 @@ async def send_exam_question(update):
         text = f"🏁 <b>Экзамен завершён!</b>\n\n✅ Правильно: {exam_round['correct']}/{total} ({pct:.0f}%)\n"
         if exam_round["wrong"]:
             text += "\n❌ Ошибся в:\n" + "\n".join(exam_round["wrong"])
+        if exam_round["correct"] == total:
+            text += (
+                "\n🏆 <b>Идеальный результат!</b>\n"
+                "Раз уж ты знаешь вообще всё — держи бонусный факт: "
+                "код <b>94</b> не принадлежит ни одному региону России. "
+                "Его выдают для транспорта за пределами страны под управлением МВД РФ — "
+                "включая космодром Байконур (Казахстан, российская аренда) "
+                "и полярные станции в Антарктиде."
+            )
         user["exam_round"] = None
         user["exam_state"] = None
         save_users(users)
