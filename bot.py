@@ -591,7 +591,7 @@ async def study_jump_prompt(callback: types.CallbackQuery):
     save_users(users)
     await bot.send_message(
         chat_id=callback.from_user.id,
-        text="Напиши код региона (например 50), номер по порядку (1-96) или название региона:",
+        text="Напиши код региона (например 50), номер по порядку (1-95) или название региона:",
     )
     await callback.answer()
 
@@ -1393,7 +1393,7 @@ async def handle_exam_answer(message: types.Message):
             await message.answer("Не нашёл такой регион. Попробуй код, номер по порядку или название (или напиши /start, чтобы отменить).")
             return
         user["awaiting_study_jump"] = False
-        ordered_state = user.get("ordered_state") or {"codes": ORDERED_CODES.copy(), "view": "detailed"}
+        ordered_state = user.get("ordered_state") or {"codes": BASE_ORDERED_CODES.copy(), "view": "detailed"}
         ordered_state["index"] = idx
         user["ordered_state"] = ordered_state
         save_users(users)
