@@ -79,6 +79,12 @@ def get_user(user_id: str):
             "exam_round": None,
             "awaiting_study_jump": False,
             "exam_notified": False,
+            "guide_seen": [],
+            "guide_active": False,
+            "guide_trips": {},
+            "guide_current_trip": None,
+            "guide_trip_counter": 0,
+            "awaiting_guide_trip_name": False,
         }
         save_users(users)
     return users, users[user_id]
@@ -274,6 +280,7 @@ def main_menu_kb():
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="📚 Изучение", callback_data="go_study_menu")],
         [InlineKeyboardButton(text="🎮 Тренировка", callback_data="go_game_menu")],
+        [InlineKeyboardButton(text="🧭 Путеводитель", callback_data="mode_guide")],
         [InlineKeyboardButton(text="📝 Экзамен", callback_data="mode_exam")],
         [InlineKeyboardButton(text="📊 Статистика", callback_data="stats")],
         [InlineKeyboardButton(text="🏆 Рейтинг", callback_data="rating")],
@@ -350,6 +357,7 @@ async def cmd_reset(message: types.Message):
 async def to_menu(callback: types.CallbackQuery):
     users, user = get_user(str(callback.from_user.id))
     user["exam_state"] = None
+    user["guide_active"] = False
     save_users(users)
     try:
         await callback.message.edit_text("🚗 Главное меню:", reply_markup=main_menu_kb())
@@ -619,6 +627,168 @@ def find_jump_index(query: str) -> int | None:
         if q in name or q in aliases:
             return i
     return None
+
+# ========== ПУТЕВОДИТЕЛЬ ==========
+def guide_checklist_text(title: str, seen: set) -> str:
+    total = len(BASE_ORDERED_CODES)
+    lines = [f"📋 <b>{title}</b> — {len(seen)} / {total}\n"]
+    for d, codes in DISTRICTS.items():
+        lines.append(f"\n<b>{d}</b>")
+        for c in codes:
+            mark = "✅" if c in seen else "❌"
+            lines.append(f"{mark} {c} {clean_name(c)}")
+    return "\n".join(lines)
+
+@dp.callback_query(F.data == "mode_guide")
+async def mode_guide(callback: types.CallbackQuery):
+    users, user = get_user(str(callback.from_user.id))
+    user["guide_active"] = True
+    save_users(users)
+    await show_guide_home(callback)
+
+async def show_guide_home(update):
+    if isinstance(update, types.CallbackQuery):
+        user_id = str(update.from_user.id)
+    else:
+        user_id = str(update.chat.id)
+
+    _, user = get_user(user_id)
+    seen = set(user.get("guide_seen", []))
+    total = len(BASE_ORDERED_CODES)
+
+    text = (
+        f"🧭 <b>Путеводитель</b>\n\n"
+        f"Бессрочный список: <b>{len(seen)} / {total}</b>\n\n"
+        f"Присылай код региона, увиденный на номере — отмечу ✅. "
+        f"Можно сразу несколько через пробел: <code>77 52 161</code>\n"
+        f"Отметил по ошибке? Пришли с минусом: <code>-52</code>"
+    )
+    builder = InlineKeyboardBuilder()
+    builder.button(text="📋 Чек-лист (бессрочный)", callback_data="guide_checklist_permanent")
+    builder.button(text="🚗 Начать новую поездку", callback_data="guide_new_trip")
+    if user.get("guide_trips"):
+        builder.button(text="📂 Мои поездки", callback_data="guide_trips_list")
+    builder.button(text="🏠 В главное меню", callback_data="to_menu")
+    builder.adjust(1)
+
+    if isinstance(update, types.CallbackQuery):
+        try:
+            await update.message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
+        except Exception:
+            await bot.send_message(chat_id=user_id, text=text, parse_mode="HTML", reply_markup=builder.as_markup())
+        await update.answer()
+    else:
+        await bot.send_message(chat_id=user_id, text=text, parse_mode="HTML", reply_markup=builder.as_markup())
+
+@dp.callback_query(F.data == "guide_checklist_permanent")
+async def guide_checklist_permanent(callback: types.CallbackQuery):
+    users, user = get_user(str(callback.from_user.id))
+    seen = set(user.get("guide_seen", []))
+    text = guide_checklist_text("Бессрочный", seen)
+    builder = InlineKeyboardBuilder()
+    builder.button(text="⬅️ Назад", callback_data="mode_guide")
+    try:
+        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
+    except Exception:
+        await bot.send_message(chat_id=callback.from_user.id, text=text, parse_mode="HTML", reply_markup=builder.as_markup())
+    await callback.answer()
+
+@dp.callback_query(F.data == "guide_new_trip")
+async def guide_new_trip(callback: types.CallbackQuery):
+    users, user = get_user(str(callback.from_user.id))
+    user["awaiting_guide_trip_name"] = True
+    save_users(users)
+    await bot.send_message(chat_id=callback.from_user.id, text="Как назовём поездку? Напиши название:")
+    await callback.answer()
+
+async def show_guide_trip_screen(update, trip_id: str):
+    if isinstance(update, types.CallbackQuery):
+        user_id = str(update.from_user.id)
+    else:
+        user_id = str(update.chat.id)
+
+    _, user = get_user(user_id)
+    trip = user.get("guide_trips", {}).get(trip_id)
+    if not trip:
+        return
+    seen = set(trip["seen"])
+    total = len(BASE_ORDERED_CODES)
+
+    text = (
+        f"🚗 <b>{trip['name']}</b>\n\n"
+        f"Отмечено: <b>{len(seen)} / {total}</b>\n\n"
+        f"Эта поездка сейчас активна — присылай коды, они пойдут и сюда, и в бессрочный список."
+    )
+    builder = InlineKeyboardBuilder()
+    builder.button(text="📋 Чек-лист поездки", callback_data=f"guide_checklist_trip_{trip_id}")
+    builder.button(text="⏹ Завершить поездку", callback_data="guide_end_trip")
+    builder.button(text="🏠 В главное меню", callback_data="to_menu")
+    builder.adjust(1)
+
+    if isinstance(update, types.CallbackQuery):
+        try:
+            await update.message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
+        except Exception:
+            await bot.send_message(chat_id=user_id, text=text, parse_mode="HTML", reply_markup=builder.as_markup())
+        await update.answer()
+    else:
+        await bot.send_message(chat_id=user_id, text=text, parse_mode="HTML", reply_markup=builder.as_markup())
+
+@dp.callback_query(F.data == "guide_trips_list")
+async def guide_trips_list(callback: types.CallbackQuery):
+    users, user = get_user(str(callback.from_user.id))
+    trips = user.get("guide_trips", {})
+    total = len(BASE_ORDERED_CODES)
+
+    builder = InlineKeyboardBuilder()
+    for trip_id, trip in trips.items():
+        label = f"{trip['name']} — {len(trip['seen'])} из {total}"
+        builder.button(text=label, callback_data=f"guide_select_trip_{trip_id}")
+    builder.adjust(1)
+    builder.row(InlineKeyboardButton(text="⬅️ Назад", callback_data="mode_guide"))
+
+    text = "📂 <b>Мои поездки</b>\n\nВыбери, чтобы сделать активной:" if trips else "Поездок пока нет."
+    try:
+        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
+    except Exception:
+        await bot.send_message(chat_id=callback.from_user.id, text=text, parse_mode="HTML", reply_markup=builder.as_markup())
+    await callback.answer()
+
+@dp.callback_query(F.data.startswith("guide_select_trip_"))
+async def guide_select_trip(callback: types.CallbackQuery):
+    trip_id = callback.data.replace("guide_select_trip_", "")
+    users, user = get_user(str(callback.from_user.id))
+    if trip_id not in user.get("guide_trips", {}):
+        await callback.answer("Поездка не найдена", show_alert=True)
+        return
+    user["guide_current_trip"] = trip_id
+    user["guide_active"] = True
+    save_users(users)
+    await show_guide_trip_screen(callback, trip_id)
+
+@dp.callback_query(F.data.startswith("guide_checklist_trip_"))
+async def guide_checklist_trip(callback: types.CallbackQuery):
+    trip_id = callback.data.replace("guide_checklist_trip_", "")
+    users, user = get_user(str(callback.from_user.id))
+    trip = user.get("guide_trips", {}).get(trip_id)
+    if not trip:
+        await callback.answer("Поездка не найдена", show_alert=True)
+        return
+    text = guide_checklist_text(trip["name"], set(trip["seen"]))
+    builder = InlineKeyboardBuilder()
+    builder.button(text="⬅️ Назад", callback_data=f"guide_select_trip_{trip_id}")
+    try:
+        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
+    except Exception:
+        await bot.send_message(chat_id=callback.from_user.id, text=text, parse_mode="HTML", reply_markup=builder.as_markup())
+    await callback.answer()
+
+@dp.callback_query(F.data == "guide_end_trip")
+async def guide_end_trip(callback: types.CallbackQuery):
+    users, user = get_user(str(callback.from_user.id))
+    user["guide_current_trip"] = None
+    save_users(users)
+    await show_guide_home(callback)
 
 # ========== ИГРА «СОСЕДИ» ==========
 @dp.callback_query(F.data == "mode_neighbors")
@@ -1417,62 +1587,131 @@ async def handle_exam_answer(message: types.Message):
         await show_study_card(message)
         return
 
-    state = user.get("exam_state")
-    if state is None:
-        await message.answer("Используй меню. /start для перезапуска.", reply_markup=main_menu_kb())
+    if user.get("awaiting_guide_trip_name"):
+        name = message.text.strip()[:50]
+        user["awaiting_guide_trip_name"] = False
+        counter = user.get("guide_trip_counter", 0) + 1
+        user["guide_trip_counter"] = counter
+        trip_id = f"trip_{counter}"
+        user.setdefault("guide_trips", {})[trip_id] = {"name": name, "seen": []}
+        user["guide_current_trip"] = trip_id
+        user["guide_active"] = True
+        save_users(users)
+        await show_guide_trip_screen(message, trip_id)
         return
 
-    code = state["code"]
-    region = regions[code]
-    user_answer = message.text.strip().lower()
-    correct_names = [region["name"].lower()] + [a.lower() for a in region.get("aliases", [])]
-    is_correct = any(
-        user_answer == name or (len(user_answer) >= 4 and (user_answer in name or name in user_answer))
-        for name in correct_names
-    )
-
-    user["total"] += 1
-    user["exam_total"] += 1
-    if is_correct:
-        user["correct"] += 1
-        user["exam_correct"] += 1
-    else:
-        user["wrong"] += 1
-
-    user.setdefault("recent_answers", []).append(1 if is_correct else 0)
-    user["recent_answers"] = user["recent_answers"][-30:]
-    
-    if code:
-        eff = DOP_TO_MAIN.get(code, code)
-        if eff not in user["region_stats"]:
-            user["region_stats"][eff] = {"correct": 0, "total": 0}
-        user["region_stats"][eff]["total"] += 1
-        if is_correct:
-            user["region_stats"][eff]["correct"] += 1
-
-    user["exam_state"] = None
-    exam_round = user.get("exam_round")
-    if exam_round is not None:
-        exam_round["asked"].append(code)
-        if is_correct:
-            exam_round["correct"] += 1
-        else:
-            exam_round["wrong"].append(f"{code} — {clean_name(code)}")
-    save_users(users)
-
-    if is_correct:
-        await message.answer(f"✅ Правильно! Это {code} — {clean_name(code)}.")
-    else:
-        builder = InlineKeyboardBuilder()
-        builder.row(InlineKeyboardButton(text="🏠 В главное меню", callback_data="to_menu"))
-        await message.answer(
-            f"❌ Неправильно. {code} — это {clean_name(code)}.\n\n{region['facts']}",
-            parse_mode="HTML",
-            reply_markup=builder.as_markup()
+    state = user.get("exam_state")
+    if state is not None:
+        code = state["code"]
+        region = regions[code]
+        user_answer = message.text.strip().lower()
+        correct_names = [region["name"].lower()] + [a.lower() for a in region.get("aliases", [])]
+        is_correct = any(
+            user_answer == name or (len(user_answer) >= 4 and (user_answer in name or name in user_answer))
+            for name in correct_names
         )
 
-    await asyncio.sleep(0.5)
-    await send_exam_question(message)
+        user["total"] += 1
+        user["exam_total"] += 1
+        if is_correct:
+            user["correct"] += 1
+            user["exam_correct"] += 1
+        else:
+            user["wrong"] += 1
+
+        user.setdefault("recent_answers", []).append(1 if is_correct else 0)
+        user["recent_answers"] = user["recent_answers"][-30:]
+
+        if code:
+            eff = DOP_TO_MAIN.get(code, code)
+            if eff not in user["region_stats"]:
+                user["region_stats"][eff] = {"correct": 0, "total": 0}
+            user["region_stats"][eff]["total"] += 1
+            if is_correct:
+                user["region_stats"][eff]["correct"] += 1
+
+        user["exam_state"] = None
+        exam_round = user.get("exam_round")
+        if exam_round is not None:
+            exam_round["asked"].append(code)
+            if is_correct:
+                exam_round["correct"] += 1
+            else:
+                exam_round["wrong"].append(f"{code} — {clean_name(code)}")
+        save_users(users)
+
+        if is_correct:
+            await message.answer(f"✅ Правильно! Это {code} — {clean_name(code)}.")
+        else:
+            builder = InlineKeyboardBuilder()
+            builder.row(InlineKeyboardButton(text="🏠 В главное меню", callback_data="to_menu"))
+            await message.answer(
+                f"❌ Неправильно. {code} — это {clean_name(code)}.\n\n{region['facts']}",
+                parse_mode="HTML",
+                reply_markup=builder.as_markup()
+            )
+
+        await asyncio.sleep(0.5)
+        await send_exam_question(message)
+        return
+
+    if user.get("guide_active"):
+        tokens = message.text.replace(",", " ").split()
+        seen = set(user.get("guide_seen", []))
+        current_trip_id = user.get("guide_current_trip")
+        trips = user.get("guide_trips", {})
+        trip = trips.get(current_trip_id) if current_trip_id else None
+        trip_seen = set(trip["seen"]) if trip else None
+
+        added, already, removed, not_found, unknown = [], [], [], [], []
+
+        for tok in tokens:
+            raw = tok.strip().lower()
+            if raw.startswith("-") and raw[1:] in regions:
+                base = get_effective_code(raw[1:])
+                removed_here = False
+                if base in seen:
+                    seen.discard(base)
+                    removed_here = True
+                if trip_seen is not None and base in trip_seen:
+                    trip_seen.discard(base)
+                    removed_here = True
+                if removed_here:
+                    removed.append(base)
+                else:
+                    not_found.append(raw[1:])
+            elif raw in regions:
+                base = get_effective_code(raw)
+                if base in seen:
+                    already.append(base)
+                else:
+                    seen.add(base)
+                    added.append(base)
+                if trip_seen is not None:
+                    trip_seen.add(base)
+            else:
+                unknown.append(tok)
+
+        user["guide_seen"] = list(seen)
+        if trip is not None:
+            trip["seen"] = list(trip_seen)
+        save_users(users)
+
+        parts = []
+        if added:
+            parts.append("✅ Отмечено: " + ", ".join(f"{c} — {clean_name(c)}" for c in added))
+        if already:
+            parts.append("Уже отмечено ✅")
+        if removed:
+            parts.append("➖ Убрано: " + ", ".join(removed))
+        if not_found:
+            parts.append("Не было отмечено: " + ", ".join(not_found))
+        if unknown:
+            parts.append("Не понял этот код.")
+        await message.answer("\n".join(parts) if parts else "Не понял этот код.")
+        return
+
+    await message.answer("Используй меню. /start для перезапуска.", reply_markup=main_menu_kb())
 
 @dp.callback_query(F.data == "district_back")
 async def district_back(callback: types.CallbackQuery):
