@@ -134,6 +134,12 @@ def clean_name(code: str) -> str:
 
 def codes_for_region(base_code: str) -> list:
     return sorted([c for c in ALL_CODES if get_effective_code(c) == base_code], key=lambda x: int(x))
+
+def codes_label_html(base_code: str) -> str:
+    parts = []
+    for c in codes_for_region(base_code):
+        parts.append(c if c == base_code else f"<tg-spoiler>{c}</tg-spoiler>")
+    return ", ".join(parts)
     return DOP_TO_MAIN.get(code, code)
 
 def image_exists(code: str) -> bool:
@@ -216,7 +222,7 @@ async def check_exam_unlock(user_id: str, users: dict, user: dict):
         try:
             await bot.send_message(
                 chat_id=user_id,
-                text="🎉 Экзамен теперь открыт! Загляни в «📝 Экзамен» в главном меню.",
+                text="🎉 Экзамен теперь открыт!\nЗагляни в «📝 Экзамен» в главном меню.",
             )
         except Exception:
             pass
@@ -505,7 +511,7 @@ async def show_study_card(update):
     progress_text = f"{state['index'] + 1} / {len(state['codes'])}"
     view = state.get("view", "detailed")
 
-    codes_label = ", ".join(codes_for_region(code))
+    codes_label = codes_label_html(code)
 
     if view == "detailed":
         text = (
@@ -765,7 +771,7 @@ async def show_district_card(update):
     code = codes[state["index"]]
     region = regions[code]
     progress_text = f"{state['index'] + 1} / {len(codes)}"
-    codes_label = ", ".join(codes_for_region(code))
+    codes_label = codes_label_html(code)
 
     text = (
         f"📖 <b>{state['district']} — {progress_text}</b>\n\n"
@@ -851,7 +857,7 @@ async def send_district_test_question(update):
 
     code = random.choice(remaining)
     region = regions[code]
-    codes_label = ", ".join(codes_for_region(code))
+    codes_label = codes_label_html(code)
 
     wrong = build_wrong_options(code)
     options = wrong + [code]
