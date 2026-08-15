@@ -85,6 +85,7 @@ def get_user(user_id: str):
             "guide_current_trip": None,
             "guide_trip_counter": 0,
             "awaiting_guide_trip_name": False,
+            "guide_pending_delete": [],
         }
         save_users(users)
     return users, users[user_id]
@@ -629,14 +630,25 @@ def find_jump_index(query: str) -> int | None:
     return None
 
 # ========== ПУТЕВОДИТЕЛЬ ==========
-def guide_checklist_text(title: str, seen: set) -> str:
+def guide_checklist_text(title: str, seen: set, mode: str = "district") -> str:
     total = len(BASE_ORDERED_CODES)
-    lines = [f"📋 <b>{title}</b> — {len(seen)} / {total}\n"]
-    for d, codes in DISTRICTS.items():
-        lines.append(f"\n<b>{d}</b>")
-        for c in codes:
+    lines = [f"📋 <b>{title}</b>\n\nОтмечено: <b>{len(seen)} / {total}</b>\n"]
+
+    if mode == "order":
+        row = []
+        for i, c in enumerate(BASE_ORDERED_CODES, 1):
             mark = "✅" if c in seen else "❌"
-            lines.append(f"{mark} {c} {clean_name(c)}")
+            row.append(f"{mark}{c}")
+            if i % 8 == 0:
+                lines.append("<code>" + " ".join(row) + "</code>")
+                row = []
+        if row:
+            lines.append("<code>" + " ".join(row) + "</code>")
+    else:
+        for d, codes in DISTRICTS.items():
+            marks = " ".join(f"{'✅' if c in seen else '❌'}{c}" for c in codes)
+            lines.append(f"\n<b>{d}</b>\n<code>{marks}</code>")
+
     return "\n".join(lines)
 
 @dp.callback_query(F.data == "mode_guide")
@@ -658,13 +670,15 @@ async def show_guide_home(update):
 
     text = (
         f"🧭 <b>Путеводитель</b>\n\n"
-        f"Бессрочный список: <b>{len(seen)} / {total}</b>\n\n"
-        f"Присылай код региона, увиденный на номере — отмечу ✅. "
-        f"Можно сразу несколько через пробел: <code>77 52 161</code>\n"
-        f"Отметил по ошибке? Пришли с минусом: <code>-52</code>"
+        f"Бессрочный список:\n"
+        f"<b>{len(seen)} / {total}</b> регионов увидено\n\n"
+        f"Как пользоваться:\n"
+        f"• Пришли код региона — отмечу ✅\n"
+        f"• Можно сразу несколько: <code>77 52 161</code>\n"
+        f"• Отметил по ошибке? Пришли с минусом: <code>-52</code>"
     )
     builder = InlineKeyboardBuilder()
-    builder.button(text="📋 Чек-лист (бессрочный)", callback_data="guide_checklist_permanent")
+    builder.button(text="📋 Чек-лист (бессрочный)", callback_data="guide_view_permanent_district")
     builder.button(text="🚗 Начать новую поездку", callback_data="guide_new_trip")
     if user.get("guide_trips"):
         builder.button(text="📂 Мои поездки", callback_data="guide_trips_list")
@@ -680,13 +694,35 @@ async def show_guide_home(update):
     else:
         await bot.send_message(chat_id=user_id, text=text, parse_mode="HTML", reply_markup=builder.as_markup())
 
-@dp.callback_query(F.data == "guide_checklist_permanent")
-async def guide_checklist_permanent(callback: types.CallbackQuery):
+@dp.callback_query(F.data.startswith("guide_view_"))
+async def guide_view(callback: types.CallbackQuery):
+    payload = callback.data[len("guide_view_"):]
+    scope, mode = payload.rsplit("_", 1)
     users, user = get_user(str(callback.from_user.id))
-    seen = set(user.get("guide_seen", []))
-    text = guide_checklist_text("Бессрочный", seen)
+
+    if scope == "permanent":
+        seen = set(user.get("guide_seen", []))
+        title = "Бессрочный"
+        back_cb = "mode_guide"
+    else:
+        trip_id = scope[len("trip_"):]
+        trip = user.get("guide_trips", {}).get(trip_id)
+        if not trip:
+            await callback.answer("Поездка не найдена", show_alert=True)
+            return
+        seen = set(trip["seen"])
+        title = trip["name"]
+        back_cb = f"guide_select_trip_{trip_id}"
+
+    text = guide_checklist_text(title, seen, mode)
+    other_mode = "district" if mode == "order" else "order"
+    toggle_label = "🔤 По порядку" if other_mode == "order" else "🗺 По округам"
+
     builder = InlineKeyboardBuilder()
-    builder.button(text="⬅️ Назад", callback_data="mode_guide")
+    builder.button(text=toggle_label, callback_data=f"guide_view_{scope}_{other_mode}")
+    builder.button(text="⬅️ Назад", callback_data=back_cb)
+    builder.adjust(1)
+
     try:
         await callback.message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
     except Exception:
@@ -717,11 +753,14 @@ async def show_guide_trip_screen(update, trip_id: str):
     text = (
         f"🚗 <b>{trip['name']}</b>\n\n"
         f"Отмечено: <b>{len(seen)} / {total}</b>\n\n"
-        f"Эта поездка сейчас активна — присылай коды, они пойдут и сюда, и в бессрочный список."
+        f"Эта поездка активна.\n"
+        f"Коды идут и сюда, и в бессрочный список одновременно."
     )
     builder = InlineKeyboardBuilder()
-    builder.button(text="📋 Чек-лист поездки", callback_data=f"guide_checklist_trip_{trip_id}")
+    builder.button(text="📋 Чек-лист поездки", callback_data=f"guide_view_trip_{trip_id}_district")
+    builder.button(text="📂 Все поездки", callback_data="guide_trips_list")
     builder.button(text="⏹ Завершить поездку", callback_data="guide_end_trip")
+    builder.button(text="🗑 Удалить поездку", callback_data=f"guide_delete_trip_confirm_{trip_id}")
     builder.button(text="🏠 В главное меню", callback_data="to_menu")
     builder.adjust(1)
 
@@ -747,7 +786,7 @@ async def guide_trips_list(callback: types.CallbackQuery):
     builder.adjust(1)
     builder.row(InlineKeyboardButton(text="⬅️ Назад", callback_data="mode_guide"))
 
-    text = "📂 <b>Мои поездки</b>\n\nВыбери, чтобы сделать активной:" if trips else "Поездок пока нет."
+    text = "📂 <b>Мои поездки</b>\n\nВыбери, чтобы открыть:" if trips else "Поездок пока нет."
     try:
         await callback.message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
     except Exception:
@@ -766,29 +805,71 @@ async def guide_select_trip(callback: types.CallbackQuery):
     save_users(users)
     await show_guide_trip_screen(callback, trip_id)
 
-@dp.callback_query(F.data.startswith("guide_checklist_trip_"))
-async def guide_checklist_trip(callback: types.CallbackQuery):
-    trip_id = callback.data.replace("guide_checklist_trip_", "")
-    users, user = get_user(str(callback.from_user.id))
-    trip = user.get("guide_trips", {}).get(trip_id)
-    if not trip:
-        await callback.answer("Поездка не найдена", show_alert=True)
-        return
-    text = guide_checklist_text(trip["name"], set(trip["seen"]))
-    builder = InlineKeyboardBuilder()
-    builder.button(text="⬅️ Назад", callback_data=f"guide_select_trip_{trip_id}")
-    try:
-        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
-    except Exception:
-        await bot.send_message(chat_id=callback.from_user.id, text=text, parse_mode="HTML", reply_markup=builder.as_markup())
-    await callback.answer()
-
 @dp.callback_query(F.data == "guide_end_trip")
 async def guide_end_trip(callback: types.CallbackQuery):
     users, user = get_user(str(callback.from_user.id))
     user["guide_current_trip"] = None
     save_users(users)
     await show_guide_home(callback)
+
+@dp.callback_query(F.data.startswith("guide_delete_trip_confirm_"))
+async def guide_delete_trip_confirm(callback: types.CallbackQuery):
+    trip_id = callback.data.replace("guide_delete_trip_confirm_", "")
+    users, user = get_user(str(callback.from_user.id))
+    trip = user.get("guide_trips", {}).get(trip_id)
+    if not trip:
+        await callback.answer("Поездка не найдена", show_alert=True)
+        return
+    builder = InlineKeyboardBuilder()
+    builder.button(text="✅ Да, удалить", callback_data=f"guide_delete_trip_yes_{trip_id}")
+    builder.button(text="❌ Отмена", callback_data=f"guide_select_trip_{trip_id}")
+    builder.adjust(1)
+    await callback.message.edit_text(
+        f"Удалить поездку «{trip['name']}»?\n\nСписок регионов поездки будет стёрт (в бессрочном списке отметки останутся).",
+        reply_markup=builder.as_markup(),
+    )
+    await callback.answer()
+
+@dp.callback_query(F.data.startswith("guide_delete_trip_yes_"))
+async def guide_delete_trip_yes(callback: types.CallbackQuery):
+    trip_id = callback.data.replace("guide_delete_trip_yes_", "")
+    users, user = get_user(str(callback.from_user.id))
+    trips = user.get("guide_trips", {})
+    if trip_id in trips:
+        del trips[trip_id]
+    if user.get("guide_current_trip") == trip_id:
+        user["guide_current_trip"] = None
+    save_users(users)
+    await guide_trips_list(callback)
+
+@dp.callback_query(F.data == "guide_delete_pending_permanent")
+async def guide_delete_pending_permanent(callback: types.CallbackQuery):
+    users, user = get_user(str(callback.from_user.id))
+    pending = user.get("guide_pending_delete", [])
+    seen = set(user.get("guide_seen", []))
+    for c in pending:
+        seen.discard(c)
+    user["guide_seen"] = list(seen)
+    user["guide_pending_delete"] = []
+    save_users(users)
+    await callback.message.edit_text(f"➖ Убрано из бессрочного: {', '.join(pending) if pending else '—'}")
+    await callback.answer()
+
+@dp.callback_query(F.data == "guide_delete_pending_trip")
+async def guide_delete_pending_trip(callback: types.CallbackQuery):
+    users, user = get_user(str(callback.from_user.id))
+    pending = user.get("guide_pending_delete", [])
+    trip_id = user.get("guide_current_trip")
+    trip = user.get("guide_trips", {}).get(trip_id) if trip_id else None
+    if trip:
+        trip_seen = set(trip["seen"])
+        for c in pending:
+            trip_seen.discard(c)
+        trip["seen"] = list(trip_seen)
+    user["guide_pending_delete"] = []
+    save_users(users)
+    await callback.message.edit_text(f"➖ Убрано из поездки: {', '.join(pending) if pending else '—'}")
+    await callback.answer()
 
 # ========== ИГРА «СОСЕДИ» ==========
 @dp.callback_query(F.data == "mode_neighbors")
@@ -1663,23 +1744,24 @@ async def handle_exam_answer(message: types.Message):
         trip = trips.get(current_trip_id) if current_trip_id else None
         trip_seen = set(trip["seen"]) if trip else None
 
-        added, already, removed, not_found, unknown = [], [], [], [], []
+        added, already, removed, not_found, unknown, pending = [], [], [], [], [], []
 
         for tok in tokens:
             raw = tok.strip().lower()
             if raw.startswith("-") and raw[1:] in regions:
                 base = get_effective_code(raw[1:])
-                removed_here = False
-                if base in seen:
+                in_perm = base in seen
+                in_trip = trip_seen is not None and base in trip_seen
+                if not in_perm and not in_trip:
+                    not_found.append(base)
+                elif in_perm and in_trip:
+                    pending.append(base)
+                elif in_perm:
                     seen.discard(base)
-                    removed_here = True
-                if trip_seen is not None and base in trip_seen:
-                    trip_seen.discard(base)
-                    removed_here = True
-                if removed_here:
                     removed.append(base)
                 else:
-                    not_found.append(raw[1:])
+                    trip_seen.discard(base)
+                    removed.append(base)
             elif raw in regions:
                 base = get_effective_code(raw)
                 if base in seen:
@@ -1695,6 +1777,8 @@ async def handle_exam_answer(message: types.Message):
         user["guide_seen"] = list(seen)
         if trip is not None:
             trip["seen"] = list(trip_seen)
+        if pending:
+            user["guide_pending_delete"] = pending
         save_users(users)
 
         parts = []
@@ -1708,7 +1792,22 @@ async def handle_exam_answer(message: types.Message):
             parts.append("Не было отмечено: " + ", ".join(not_found))
         if unknown:
             parts.append("Не понял этот код.")
-        await message.answer("\n".join(parts) if parts else "Не понял этот код.")
+
+        if parts:
+            await message.answer("\n".join(parts))
+
+        if pending:
+            codes_str = ", ".join(pending)
+            builder = InlineKeyboardBuilder()
+            builder.button(text="🗂 Из бессрочного", callback_data="guide_delete_pending_permanent")
+            builder.button(text="🚗 Из поездки", callback_data="guide_delete_pending_trip")
+            builder.adjust(1)
+            await message.answer(
+                f"Код(ы) {codes_str} отмечены и в бессрочном, и в поездке.\nОткуда убрать?",
+                reply_markup=builder.as_markup(),
+            )
+        elif not parts:
+            await message.answer("Не понял этот код.")
         return
 
     await message.answer("Используй меню. /start для перезапуска.", reply_markup=main_menu_kb())
