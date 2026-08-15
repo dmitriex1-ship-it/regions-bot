@@ -361,6 +361,7 @@ async def to_menu(callback: types.CallbackQuery):
     users, user = get_user(str(callback.from_user.id))
     user["exam_state"] = None
     user["guide_active"] = False
+    user["awaiting_guide_trip_name"] = False
     save_users(users)
     try:
         await callback.message.edit_text("🚗 Главное меню:", reply_markup=main_menu_kb())
@@ -825,8 +826,22 @@ async def guide_new_trip(callback: types.CallbackQuery):
     users, user = get_user(str(callback.from_user.id))
     user["awaiting_guide_trip_name"] = True
     save_users(users)
-    await bot.send_message(chat_id=callback.from_user.id, text="Как назовём поездку? Напиши название:")
+    builder = InlineKeyboardBuilder()
+    builder.button(text="❌ Отмена", callback_data="guide_new_trip_cancel")
+    await bot.send_message(
+        chat_id=callback.from_user.id,
+        text="Как назовём поездку? Напиши название:",
+        reply_markup=builder.as_markup(),
+    )
     await callback.answer()
+
+@dp.callback_query(F.data == "guide_new_trip_cancel")
+async def guide_new_trip_cancel(callback: types.CallbackQuery):
+    users, user = get_user(str(callback.from_user.id))
+    user["awaiting_guide_trip_name"] = False
+    save_users(users)
+    await callback.answer("Отменено")
+    await show_guide_home(callback)
 
 async def show_guide_trip_screen(update, trip_id: str):
     if isinstance(update, types.CallbackQuery):
