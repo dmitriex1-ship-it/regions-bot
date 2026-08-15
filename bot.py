@@ -1796,6 +1796,19 @@ async def handle_exam_answer(message: types.Message):
         if parts:
             await message.answer("\n".join(parts))
 
+        nav = InlineKeyboardBuilder()
+        if current_trip_id:
+            nav.button(text="📋 Чек-лист поездки", callback_data=f"guide_view_trip_{current_trip_id}_district")
+            nav.button(text="🚗 Экран поездки", callback_data=f"guide_select_trip_{current_trip_id}")
+        else:
+            nav.button(text="📋 Чек-лист", callback_data="guide_view_permanent_district")
+            nav.button(text="🧭 Путеводитель", callback_data="mode_guide")
+        nav.button(text="🏠 В главное меню", callback_data="to_menu")
+        nav.adjust(1)
+
+        if parts:
+            await message.answer("\n".join(parts), reply_markup=nav.as_markup())
+
         if pending:
             codes_str = ", ".join(pending)
             builder = InlineKeyboardBuilder()
@@ -1807,7 +1820,7 @@ async def handle_exam_answer(message: types.Message):
                 reply_markup=builder.as_markup(),
             )
         elif not parts:
-            await message.answer("Не понял этот код.")
+            await message.answer("Не понял этот код.", reply_markup=nav.as_markup())
         return
 
     await message.answer("Используй меню. /start для перезапуска.", reply_markup=main_menu_kb())
