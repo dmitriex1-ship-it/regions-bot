@@ -1807,9 +1807,6 @@ async def handle_exam_answer(message: types.Message):
         if unknown:
             parts.append("Не понял этот код.")
 
-        if parts:
-            await message.answer("\n".join(parts))
-
         nav = InlineKeyboardBuilder()
         if current_trip_id:
             nav.button(text="📋 Чек-лист поездки", callback_data=f"guide_view_trip_{current_trip_id}_district")
