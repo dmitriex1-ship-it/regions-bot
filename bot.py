@@ -808,9 +808,16 @@ async def guide_select_trip(callback: types.CallbackQuery):
 @dp.callback_query(F.data == "guide_end_trip")
 async def guide_end_trip(callback: types.CallbackQuery):
     users, user = get_user(str(callback.from_user.id))
+    trip = user.get("guide_trips", {}).get(user.get("guide_current_trip"))
+    trip_name = trip["name"] if trip else "Поездка"
     user["guide_current_trip"] = None
     save_users(users)
-    await show_guide_home(callback)
+    await callback.answer()
+    await bot.send_message(
+        chat_id=callback.from_user.id,
+        text=f"⏹ Поездка «{trip_name}» завершена.\nНовые коды теперь будут добавляться только в бессрочный список.",
+    )
+    await show_guide_home(callback.message)
 
 @dp.callback_query(F.data.startswith("guide_delete_trip_confirm_"))
 async def guide_delete_trip_confirm(callback: types.CallbackQuery):
@@ -1737,7 +1744,14 @@ async def handle_exam_answer(message: types.Message):
         return
 
     if user.get("guide_active"):
-        tokens = message.text.replace(",", " ").split()
+        raw_tokens = message.text.replace(",", " ").split()
+        tokens = []
+        for t in raw_tokens:
+            prefix = "-" if t.startswith("-") else ""
+            body = t[1:] if prefix else t
+            if body.isdigit() and len(body) == 1:
+                body = "0" + body
+            tokens.append(prefix + body)
         seen = set(user.get("guide_seen", []))
         current_trip_id = user.get("guide_current_trip")
         trips = user.get("guide_trips", {})
