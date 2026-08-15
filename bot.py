@@ -671,17 +671,14 @@ async def show_guide_home(update):
     text = (
         f"🧭 <b>Путеводитель</b>\n\n"
         f"Бессрочный список:\n"
-        f"<b>{len(seen)} / {total}</b> регионов увидено\n\n"
-        f"Как пользоваться:\n"
-        f"• Пришли код региона — отмечу ✅\n"
-        f"• Можно сразу несколько: <code>77 52 161</code>\n"
-        f"• Отметил по ошибке? Пришли с минусом: <code>-52</code>"
+        f"<b>{len(seen)} / {total}</b> регионов увидено"
     )
     builder = InlineKeyboardBuilder()
     builder.button(text="📋 Чек-лист (бессрочный)", callback_data="guide_view_permanent_district")
     builder.button(text="🚗 Начать новую поездку", callback_data="guide_new_trip")
     if user.get("guide_trips"):
         builder.button(text="📂 Мои поездки", callback_data="guide_trips_list")
+    builder.button(text="❓ Как пользоваться", callback_data="guide_help")
     builder.button(text="🏠 В главное меню", callback_data="to_menu")
     builder.adjust(1)
 
@@ -693,6 +690,25 @@ async def show_guide_home(update):
         await update.answer()
     else:
         await bot.send_message(chat_id=user_id, text=text, parse_mode="HTML", reply_markup=builder.as_markup())
+
+@dp.callback_query(F.data == "guide_help")
+async def guide_help(callback: types.CallbackQuery):
+    text = (
+        "❓ <b>Как пользоваться Путеводителем</b>\n\n"
+        "Присылай боту код региона, который увидел на номере — отмечу ✅.\n\n"
+        "Можно сразу несколько через пробел:\n<code>77 52 161</code>\n\n"
+        "Отметил по ошибке? Пришли с минусом:\n<code>-52</code>\n\n"
+        "<b>Бессрочный список</b> — копится всегда, пока ты в этом режиме, сам никогда не сбрасывается.\n\n"
+        "<b>Поездки</b> — отдельные именованные чек-листы (например «Отпуск в Сочи»). Пока поездка активна, коды идут одновременно и в неё, и в бессрочный список — так видно и «что было именно в этой поездке», и «что видел вообще за всё время».\n\n"
+        "<b>Завершить поездку</b> — не удаляет её, а просто отвязывает новые коды: дальше они идут только в бессрочный список. Сама поездка и её чек-лист остаются в «Мои поездки», пока не удалишь вручную."
+    )
+    builder = InlineKeyboardBuilder()
+    builder.button(text="⬅️ Назад", callback_data="mode_guide")
+    try:
+        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
+    except Exception:
+        await bot.send_message(chat_id=callback.from_user.id, text=text, parse_mode="HTML", reply_markup=builder.as_markup())
+    await callback.answer()
 
 @dp.callback_query(F.data.startswith("guide_view_"))
 async def guide_view(callback: types.CallbackQuery):
@@ -720,6 +736,7 @@ async def guide_view(callback: types.CallbackQuery):
 
     builder = InlineKeyboardBuilder()
     builder.button(text=toggle_label, callback_data=f"guide_view_{scope}_{other_mode}")
+    builder.button(text="🗑 Очистить чек-лист", callback_data=f"guide_clear_confirm_{scope}")
     builder.button(text="⬅️ Назад", callback_data=back_cb)
     builder.adjust(1)
 
@@ -728,6 +745,33 @@ async def guide_view(callback: types.CallbackQuery):
     except Exception:
         await bot.send_message(chat_id=callback.from_user.id, text=text, parse_mode="HTML", reply_markup=builder.as_markup())
     await callback.answer()
+
+@dp.callback_query(F.data.startswith("guide_clear_confirm_"))
+async def guide_clear_confirm(callback: types.CallbackQuery):
+    scope = callback.data[len("guide_clear_confirm_"):]
+    label = "бессрочный список" if scope == "permanent" else "чек-лист этой поездки"
+    builder = InlineKeyboardBuilder()
+    builder.button(text="✅ Да, очистить", callback_data=f"guide_clear_yes_{scope}")
+    builder.button(text="❌ Отмена", callback_data=f"guide_view_{scope}_district")
+    builder.adjust(1)
+    await callback.message.edit_text(f"Очистить {label}? Все отметки будут стёрты.", reply_markup=builder.as_markup())
+    await callback.answer()
+
+@dp.callback_query(F.data.startswith("guide_clear_yes_"))
+async def guide_clear_yes(callback: types.CallbackQuery):
+    scope = callback.data[len("guide_clear_yes_"):]
+    users, user = get_user(str(callback.from_user.id))
+    if scope == "permanent":
+        user["guide_seen"] = []
+        save_users(users)
+        await show_guide_home(callback)
+    else:
+        trip_id = scope[len("trip_"):]
+        trip = user.get("guide_trips", {}).get(trip_id)
+        if trip:
+            trip["seen"] = []
+        save_users(users)
+        await show_guide_trip_screen(callback, trip_id)
 
 @dp.callback_query(F.data == "guide_new_trip")
 async def guide_new_trip(callback: types.CallbackQuery):
@@ -1797,11 +1841,11 @@ async def handle_exam_answer(message: types.Message):
 
         parts = []
         if added:
-            parts.append("✅ Отмечено: " + ", ".join(f"{c} — {clean_name(c)}" for c in added))
+            parts.append("✅ Отмечено:\n" + "\n".join(f"{c} — {clean_name(c)}" for c in added))
         if already:
             parts.append("Уже отмечено ✅")
         if removed:
-            parts.append("➖ Убрано: " + ", ".join(removed))
+            parts.append("➖ Убрано:\n" + "\n".join(removed))
         if not_found:
             parts.append("Не было отмечено: " + ", ".join(not_found))
         if unknown:
