@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 import random
+from datetime import datetime, timezone
 from pathlib import Path
 
 from aiogram import Bot, Dispatcher, F, types
@@ -86,6 +87,7 @@ def get_user(user_id: str):
             "guide_trip_counter": 0,
             "awaiting_guide_trip_name": False,
             "guide_pending_delete": [],
+            "guide_achievements": [],
         }
         save_users(users)
     return users, users[user_id]
@@ -630,6 +632,51 @@ def find_jump_index(query: str) -> int | None:
     return None
 
 # ========== ПУТЕВОДИТЕЛЬ ==========
+GUIDE_MILESTONES = [25, 50, 75, 100]
+
+def check_guide_achievements(seen: set, achieved: list) -> list:
+    new_texts = []
+    total = len(BASE_ORDERED_CODES)
+    pct = (len(seen) / total) * 100 if total else 0
+    for m in GUIDE_MILESTONES:
+        key = f"pct_{m}"
+        if pct >= m and key not in achieved:
+            achieved.append(key)
+            if m < 100:
+                new_texts.append(f"🏆 Пройдено {m}% регионов!")
+            else:
+                new_texts.append("🏆 Все 89 регионов увидены! Путеводитель пройден полностью!")
+    for d, codes in DISTRICTS.items():
+        key = f"district_{d}"
+        if codes and all(c in seen for c in codes) and key not in achieved:
+            achieved.append(key)
+            new_texts.append(f"🏆 Округ «{d}» пройден полностью!")
+    return new_texts
+
+def guide_trip_summary_text(trip: dict) -> str:
+    seen = set(trip["seen"])
+    total = len(BASE_ORDERED_CODES)
+
+    duration_line = ""
+    started = trip.get("started")
+    if started:
+        try:
+            started_dt = datetime.fromisoformat(started)
+            days = (datetime.now(timezone.utc) - started_dt).days
+            duration_line = f"\nДлительность: {days} дн." if days > 0 else "\nДлительность: меньше дня"
+        except Exception:
+            pass
+
+    lines = [f"🏁 <b>Итоги поездки «{trip['name']}»</b>\n", f"Увидено: <b>{len(seen)} / {total}</b>{duration_line}\n"]
+    for d, codes in DISTRICTS.items():
+        marked = [c for c in codes if c in seen]
+        if marked:
+            names = ", ".join(f"{c} {clean_name(c)}" for c in marked)
+            lines.append(f"<b>{d}</b>: {names}")
+    if not seen:
+        lines.append("Пока ничего не отмечено.")
+    return "\n".join(lines)
+    
 def guide_checklist_text(title: str, seen: set, mode: str = "district") -> str:
     total = len(BASE_ORDERED_CODES)
     lines = [f"📋 <b>{title}</b>\n\nОтмечено: <b>{len(seen)} / {total}</b>\n"]
@@ -794,9 +841,19 @@ async def show_guide_trip_screen(update, trip_id: str):
     seen = set(trip["seen"])
     total = len(BASE_ORDERED_CODES)
 
+    days_line = ""
+    started = trip.get("started")
+    if started:
+        try:
+            started_dt = datetime.fromisoformat(started)
+            days = (datetime.now(timezone.utc) - started_dt).days
+            days_line = f"\nДлится: {days} дн." if days > 0 else "\nНачата сегодня"
+        except Exception:
+            pass
+
     text = (
         f"🚗 <b>{trip['name']}</b>\n\n"
-        f"Отмечено: <b>{len(seen)} / {total}</b>\n\n"
+        f"Отмечено: <b>{len(seen)} / {total}</b>{days_line}\n\n"
         f"Эта поездка активна.\n"
         f"Коды идут и сюда, и в бессрочный список одновременно."
     )
@@ -854,6 +911,7 @@ async def guide_end_trip(callback: types.CallbackQuery):
     users, user = get_user(str(callback.from_user.id))
     trip = user.get("guide_trips", {}).get(user.get("guide_current_trip"))
     trip_name = trip["name"] if trip else "Поездка"
+    summary_text = guide_trip_summary_text(trip) if trip else None
     user["guide_current_trip"] = None
     save_users(users)
     await callback.answer()
@@ -861,6 +919,8 @@ async def guide_end_trip(callback: types.CallbackQuery):
         chat_id=callback.from_user.id,
         text=f"⏹ Поездка «{trip_name}» завершена.\nНовые коды теперь будут добавляться только в бессрочный список.",
     )
+    if summary_text:
+        await bot.send_message(chat_id=callback.from_user.id, text=summary_text, parse_mode="HTML")
     await show_guide_home(callback.message)
 
 @dp.callback_query(F.data.startswith("guide_delete_trip_confirm_"))
@@ -1725,7 +1785,11 @@ async def handle_exam_answer(message: types.Message):
         counter = user.get("guide_trip_counter", 0) + 1
         user["guide_trip_counter"] = counter
         trip_id = f"trip_{counter}"
-        user.setdefault("guide_trips", {})[trip_id] = {"name": name, "seen": []}
+        now_iso = datetime.now(timezone.utc).isoformat()
+        user.setdefault("guide_trips", {})[trip_id] = {
+            "name": name, "seen": [], "achievements": [],
+            "started": now_iso, "last_activity": now_iso, "reminded": False,
+        }
         user["guide_current_trip"] = trip_id
         user["guide_active"] = True
         save_users(users)
@@ -1837,6 +1901,19 @@ async def handle_exam_answer(message: types.Message):
             trip["seen"] = list(trip_seen)
         if pending:
             user["guide_pending_delete"] = pending
+
+        achievement_texts = []
+        if added:
+            perm_achievements = user.setdefault("guide_achievements", [])
+            achievement_texts += check_guide_achievements(seen, perm_achievements)
+            if trip is not None:
+                trip_achievements = trip.setdefault("achievements", [])
+                trip_texts = check_guide_achievements(trip_seen, trip_achievements)
+                achievement_texts += [f"{t} (в поездке «{trip['name']}»)" for t in trip_texts]
+
+        if trip is not None:
+            trip["last_activity"] = datetime.now(timezone.utc).isoformat()
+
         save_users(users)
 
         parts = []
@@ -1850,6 +1927,8 @@ async def handle_exam_answer(message: types.Message):
             parts.append("Не было отмечено: " + ", ".join(not_found))
         if unknown:
             parts.append("Не понял этот код.")
+        if achievement_texts:
+            parts.append("\n".join(achievement_texts))
 
         nav = InlineKeyboardBuilder()
         if current_trip_id:
