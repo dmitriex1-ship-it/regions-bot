@@ -362,6 +362,7 @@ async def to_menu(callback: types.CallbackQuery):
     user["exam_state"] = None
     user["guide_active"] = False
     user["awaiting_guide_trip_name"] = False
+    user["awaiting_study_jump"] = False
     save_users(users)
     try:
         await callback.message.edit_text("🚗 Главное меню:", reply_markup=main_menu_kb())
@@ -609,11 +610,22 @@ async def study_jump_prompt(callback: types.CallbackQuery):
     users, user = get_user(str(callback.from_user.id))
     user["awaiting_study_jump"] = True
     save_users(users)
+    builder = InlineKeyboardBuilder()
+    builder.button(text="❌ Отмена", callback_data="study_jump_cancel")
     await bot.send_message(
         chat_id=callback.from_user.id,
-        text="Напиши код региона (например 50 или 95), порядковый номер в списке из 89 регионов, или название региона:",
+        text="Напиши код региона (например 50), номер по порядку (1-89) или название региона:",
+        reply_markup=builder.as_markup(),
     )
     await callback.answer()
+
+@dp.callback_query(F.data == "study_jump_cancel")
+async def study_jump_cancel(callback: types.CallbackQuery):
+    users, user = get_user(str(callback.from_user.id))
+    user["awaiting_study_jump"] = False
+    save_users(users)
+    await callback.answer("Отменено")
+    await show_study_card(callback)
 
 def find_jump_index(query: str) -> int | None:
     q = query.strip().lower()
@@ -635,6 +647,14 @@ def find_jump_index(query: str) -> int | None:
 # ========== ПУТЕВОДИТЕЛЬ ==========
 GUIDE_MILESTONES = [25, 50, 75, 100]
 
+def achievement_label(key: str) -> str:
+    if key.startswith("pct_"):
+        pct = key.split("_")[1]
+        return "🏆 Все 89 регионов увидены!" if pct == "100" else f"🏆 Пройдено {pct}% регионов"
+    if key.startswith("district_"):
+        return f"🏆 Округ «{key[len('district_'):]}» пройден полностью"
+    return f"🏆 {key}"
+    
 def check_guide_achievements(seen: set, achieved: list) -> list:
     new_texts = []
     total = len(BASE_ORDERED_CODES)
@@ -723,6 +743,7 @@ async def show_guide_home(update):
     )
     builder = InlineKeyboardBuilder()
     builder.button(text="📋 Чек-лист (бессрочный)", callback_data="guide_view_permanent_district")
+    builder.button(text="🏆 Достижения", callback_data="guide_achievements_permanent")
     builder.button(text="🚗 Начать новую поездку", callback_data="guide_new_trip")
     if user.get("guide_trips"):
         builder.button(text="📂 Мои поездки", callback_data="guide_trips_list")
@@ -739,6 +760,41 @@ async def show_guide_home(update):
     else:
         await bot.send_message(chat_id=user_id, text=text, parse_mode="HTML", reply_markup=builder.as_markup())
 
+@dp.callback_query(F.data == "guide_achievements_permanent")
+async def guide_achievements_permanent(callback: types.CallbackQuery):
+    users, user = get_user(str(callback.from_user.id))
+    achieved = user.get("guide_achievements", [])
+    text = "🏆 <b>Достижения — бессрочный список</b>\n\n" + (
+        "\n".join(achievement_label(k) for k in achieved) if achieved else "Пока пусто — отмечай регионы!"
+    )
+    builder = InlineKeyboardBuilder()
+    builder.button(text="⬅️ Назад", callback_data="mode_guide")
+    try:
+        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
+    except Exception:
+        await bot.send_message(chat_id=callback.from_user.id, text=text, parse_mode="HTML", reply_markup=builder.as_markup())
+    await callback.answer()
+
+@dp.callback_query(F.data.startswith("guide_achievements_trip_"))
+async def guide_achievements_trip(callback: types.CallbackQuery):
+    trip_id = callback.data.replace("guide_achievements_trip_", "")
+    users, user = get_user(str(callback.from_user.id))
+    trip = user.get("guide_trips", {}).get(trip_id)
+    if not trip:
+        await callback.answer("Поездка не найдена", show_alert=True)
+        return
+    achieved = trip.get("achievements", [])
+    text = f"🏆 <b>Достижения — «{trip['name']}»</b>\n\n" + (
+        "\n".join(achievement_label(k) for k in achieved) if achieved else "Пока пусто — отмечай регионы!"
+    )
+    builder = InlineKeyboardBuilder()
+    builder.button(text="⬅️ Назад", callback_data=f"guide_select_trip_{trip_id}")
+    try:
+        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
+    except Exception:
+        await bot.send_message(chat_id=callback.from_user.id, text=text, parse_mode="HTML", reply_markup=builder.as_markup())
+    await callback.answer()
+    
 @dp.callback_query(F.data == "guide_help")
 async def guide_help(callback: types.CallbackQuery):
     text = (
@@ -874,6 +930,7 @@ async def show_guide_trip_screen(update, trip_id: str):
     )
     builder = InlineKeyboardBuilder()
     builder.button(text="📋 Чек-лист поездки", callback_data=f"guide_view_trip_{trip_id}_district")
+    builder.button(text="🏆 Достижения поездки", callback_data=f"guide_achievements_trip_{trip_id}")
     builder.button(text="📂 Все поездки", callback_data="guide_trips_list")
     builder.button(text="⏹ Завершить поездку", callback_data="guide_end_trip")
     builder.button(text="🗑 Удалить поездку", callback_data=f"guide_delete_trip_confirm_{trip_id}")
